@@ -74,32 +74,38 @@ Look for `[ixtli]` lines. The KWin Scripting Console (`Alt+F2` → `wm console`)
 - No config file — boot-time `LAYOUT` and per-layout caps are constants in `main.js`. Set the boot default via `./dev-reload.sh grid|center`; cycle at runtime with the shortcut below.
 - Windows on all desktops (or pinned to multiple desktops) stay floating.
 - Knocked-out pile has no tab UI yet.
-- App-launcher shortcuts assume the executables (`kitty`, `helium`, `bitwarden`, etc.) are on `$PATH`. If a launcher silently does nothing, that's the most likely cause — the journal will log `spawn: <cmd>` regardless of whether the binary exists.
 
 ## Shortcuts
 
-Defaults are best-effort; KDE Plasma 6 already binds many `Meta+<key>` combinations (Quick Tile, task switcher). On first install, clear conflicting Plasma defaults in **System Settings → Shortcuts → KWin** (search for "Quick Tile" and "Switch Window") for the arrow-key and `Meta+Tab` shortcuts to fire. Rebind any Ixtli shortcut from the same screen by searching for the `Ixtli:` prefix.
+Ixtli registers its **window-management** shortcuts directly. **App launchers** live in KDE's native Custom Shortcuts mechanism — KWin scripts can't spawn processes (no exec API; `callDBus` → systemd-run can't marshal the nested-variant `ExecStart` arg cleanly). Both are configured in one shot by `scripts/setup-shortcuts.sh`, which:
 
-### Layout
+1. Disables Plasma KWin defaults that collide with Ixtli's bindings (Quick Tile on `Meta+arrows`, Move Window to Screen on `Meta+Shift+Left/Right`, and the `Meta+Tab` half of Walk Through Windows — `Alt+Tab` is preserved).
+2. Installs hidden `.desktop` files under `~/.local/share/applications/ixtli-spawn-*.desktop` for each launcher.
+3. Binds each `.desktop` to a key via `~/.config/kglobalshortcutsrc`.
+
+Run it once after installing the script package:
+
+```sh
+./scripts/setup-shortcuts.sh
+```
+
+Re-runnable safely. After running, log out and back in once if a shortcut doesn't fire — `kglobalaccel` sometimes needs the session restart to pick up new bindings.
+
+### Window management (in main.js)
 
 | Default | Action |
 |---|---|
 | `Meta+Ctrl+Shift+L` | Cycle window layout (centerTile ↔ autoGrid) |
 | `Meta+Ctrl+G` | Set layout: autoGrid |
 | `Meta+Ctrl+C` | Set layout: centerTile |
-
-### Focus & swap
-
-| Default | Action |
-|---|---|
 | `Meta+Left/Right/Up/Down` | Focus tile in that direction |
 | `Meta+Shift+Left/Right/Up/Down` | Swap focused window with neighbor in that direction |
 | `Meta+Tab` | Cycle focus through visible tiles |
 | `Meta+U` | Focus most-recently-focused window (toggle) |
 
-### App launchers
+Rebind in **System Settings → Shortcuts → KWin** (search for `Ixtli:`).
 
-Launcher callbacks ask systemd's user manager to start the command as a transient unit (`callDBus` → `org.freedesktop.systemd1.Manager.StartTransientUnit`). KWin scripts can't spawn processes directly; this is the workaround. All commands run via `/bin/sh -c …` so `$HOME` and pipes work.
+### App launchers (via setup-shortcuts.sh)
 
 | Default | Action |
 |---|---|
@@ -109,3 +115,5 @@ Launcher callbacks ask systemd's user manager to start the command as a transien
 | `Meta+Shift+B/F/H/I/M/N/T/U/W/Y` | btop / spf / htop / impala / spotify / nvim / helium / bluetui / wiremix / yazi (kitty-wrapped where applicable) |
 | `Meta+Alt+A/D/G/N/U/Y` | Helium webapps: Audible / Discord / Gemini / Netflix / Upwork / YouTube |
 | `Ctrl+Shift+Space` | Nerd Fonts cheatsheet (Helium webapp) |
+
+Rebind in **System Settings → Shortcuts → Custom Shortcuts** (entries named `Ixtli: …`). To remove all launcher bindings, delete the `ixtli-spawn-*.desktop` files and the matching groups in `kglobalshortcutsrc`.

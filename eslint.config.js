@@ -13,7 +13,6 @@ module.exports = [
         KWin: "readonly",
         print: "readonly",
         registerShortcut: "readonly",
-        callDBus: "readonly",
       },
     },
   },

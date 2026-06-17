@@ -15,7 +15,7 @@ fail=0
 # Shell scripts — only if shellcheck is installed.
 if command -v shellcheck >/dev/null 2>&1; then
     shellcheck dev-reload.sh dev-stop.sh \
-        scripts/package.sh scripts/install-local.sh \
+        scripts/package.sh scripts/install-local.sh scripts/setup-shortcuts.sh \
         .githooks/commit-msg .githooks/pre-commit .githooks/pre-push \
         || fail=1
 else
