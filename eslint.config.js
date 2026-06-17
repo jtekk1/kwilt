@@ -12,6 +12,7 @@ module.exports = [
         workspace: "readonly",
         KWin: "readonly",
         print: "readonly",
+        registerShortcut: "readonly",
       },
     },
   },
