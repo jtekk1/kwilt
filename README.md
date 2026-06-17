@@ -56,7 +56,7 @@ ln -s "$PWD" "$HOME/.local/share/kwin/scripts/ixtli"
 ./dev-stop.sh            # stop and unload
 ```
 
-`dev-reload.sh` with a layout argument sed-rewrites the `LAYOUT` constant in `main.js`, then reloads — so the source reflects the active mode (and `git diff` shows what you last ran).
+`dev-reload.sh` with a layout argument sed-rewrites the `LAYOUT` declaration in `main.js`, then reloads — so the source reflects the boot default (and `git diff` shows what you last ran). Runtime switching is via the `Meta+Ctrl+Shift+L` shortcut.
 
 Important: KWin's `loadScript` over D-Bus **registers but doesn't start** the script — `run` must be called on the per-script object. `dev-reload.sh` handles this; `dev-stop.sh` calls `unloadScript`, which stops and removes in one call.
 
@@ -71,8 +71,15 @@ Look for `[ixtli]` lines. The KWin Scripting Console (`Alt+F2` → `wm console`)
 ## Known gaps
 
 - User maximizing/fullscreening a tiled window doesn't auto-untile.
-- No config file — `LAYOUT` and per-layout caps are constants in `main.js`.
-- No in-script layout-switching shortcut — switch via `./dev-reload.sh grid|center` (rewrites `LAYOUT` and reloads).
+- No config file — boot-time `LAYOUT` and per-layout caps are constants in `main.js`. Set the boot default via `./dev-reload.sh grid|center`; cycle at runtime with the shortcut below.
 - Windows on all desktops (or pinned to multiple desktops) stay floating.
 - Knocked-out pile has no tab UI yet.
-- No keyboard shortcuts for focus/swap/cycle yet.
+- No keyboard shortcuts for focus/swap.
+
+## Shortcuts
+
+| Default | Action |
+|---|---|
+| `Meta+Ctrl+Shift+L` | Cycle window layout (centerTile ↔ autoGrid) |
+
+Rebind in **System Settings → Shortcuts → KWin → Ixtli: Cycle window layout**.

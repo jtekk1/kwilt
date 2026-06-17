@@ -32,10 +32,10 @@ case "${1:-}" in
     "")
         ;;
     grid)
-        sed -i 's|const LAYOUT = "[^"]*"|const LAYOUT = "autoGrid"|' "$MAIN_JS"
+        sed -i 's|^let LAYOUT = "[^"]*"|let LAYOUT = "autoGrid"|' "$MAIN_JS"
         ;;
     center)
-        sed -i 's|const LAYOUT = "[^"]*"|const LAYOUT = "centerTile"|' "$MAIN_JS"
+        sed -i 's|^let LAYOUT = "[^"]*"|let LAYOUT = "centerTile"|' "$MAIN_JS"
         ;;
     *)
         echo "unknown layout: $1" >&2
@@ -44,7 +44,7 @@ case "${1:-}" in
         ;;
 esac
 
-current_layout=$(grep -oP '^const LAYOUT = "\K[^"]+' "$MAIN_JS" || echo "?")
+current_layout=$(grep -oP '^let LAYOUT = "\K[^"]+' "$MAIN_JS" || echo "?")
 
 # Unload. Returns "b false" if the script wasn't loaded — that's fine.
 busctl --user call org.kde.KWin /Scripting \
