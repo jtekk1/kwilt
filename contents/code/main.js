@@ -53,6 +53,12 @@ function isTileable(w) {
   if (w.onAllDesktops) return false;
   if (!w.output) return false;
   if (!singleDesktop(w)) return false;
+  // Some apps (Electron tray helpers, hidden background windows) pass
+  // normalWindow but never become user-facing. Skip-taskbar AND skip-
+  // switcher together is a reliable signal these aren't real user
+  // windows we should be tiling. We require BOTH because some legit
+  // apps set just one (e.g., a few terminals skip the switcher).
+  if (w.skipTaskbar && w.skipSwitcher) return false;
   return true;
 }
 
@@ -100,9 +106,9 @@ function geometriesCenterTile(n, area) {
   const x = area.x, y = area.y, w = area.width, h = area.height;
   if (n <= 0) return [];
 
-  // N=1: single 80%-wide window, centered horizontally.
+  // N=1: single 85%-wide window, centered horizontally.
   if (n === 1) {
-    const cw = Math.floor(0.8 * w);
+    const cw = Math.floor(0.85 * w);
     return [rect(x + Math.floor((w - cw) / 2), y, cw, h)];
   }
 
@@ -529,10 +535,35 @@ function focusLast() {
   }
 }
 
+// Rebuild every queue from the current `workspace.windowList()`. Bound to
+// Meta+Ctrl+Shift+R as a manual recovery hatch — if a ghost slot ever
+// appears, this re-snapshots ground truth without needing a script reload.
+function rebuildQueues() {
+  queues.clear();
+  const existing = workspace.windowList ? workspace.windowList() : (workspace.clientList ? workspace.clientList() : []);
+  for (const w of existing) {
+    // Stale Qt dynamic property from a prior script-load — clear so
+    // bindWindow actually re-connects signals against the new JS engine.
+    w._ixtliBound = false;
+    const key = track(w);
+    if (key) bindWindow(w);
+  }
+  retileAll();
+  log("rebuilt queues from workspace.windowList()");
+}
+
 function init() {
   log("loaded; layout=" + LAYOUT + " cap=" + CAP);
   const existing = workspace.windowList ? workspace.windowList() : (workspace.clientList ? workspace.clientList() : []);
   for (const w of existing) {
+    // _ixtliBound is a Qt dynamic property that persists across script
+    // reloads (the QObject lives in KWin), but the signal connections
+    // bindWindow set up under the previous JS engine were torn down when
+    // it was destroyed. Resetting here ensures we re-connect against the
+    // current engine — otherwise bindWindow short-circuits and our
+    // minimizedChanged / fullScreenChanged / closed listeners never fire
+    // for windows that were open before the reload.
+    w._ixtliBound = false;
     const key = track(w);
     if (key) bindWindow(w);
   }
@@ -560,6 +591,10 @@ function init() {
   registerShortcut("IxtliCycleLayout",  "Ixtli: Cycle window layout",       "Meta+Ctrl+Shift+L", cycleLayout);
   registerShortcut("IxtliLayoutGrid",   "Ixtli: Layout — autoGrid",         "Meta+Ctrl+G",       function () { setLayout("autoGrid"); });
   registerShortcut("IxtliLayoutCenter", "Ixtli: Layout — centerTile",       "Meta+Ctrl+C",       function () { setLayout("centerTile"); });
+
+  // Manual recovery: re-snapshot the queues from workspace.windowList().
+  // Use when you suspect a ghost tile slot — quicker than ./dev-reload.sh.
+  registerShortcut("IxtliRebuildQueues", "Ixtli: Rebuild tile queues (ghost-slot recovery)", "Meta+Ctrl+Shift+R", rebuildQueues);
 
   // Focus by direction (Meta+arrows) and swap by direction (Meta+Shift+arrows).
   // Plasma's KWin defaults (Quick Tile / Move Window to Screen) claim these

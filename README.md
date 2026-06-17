@@ -12,7 +12,7 @@ Selected via the `LAYOUT` constant at the top of `contents/code/main.js`. Two ar
 
 | N | Layout |
 |---|---|
-| 1 | centered 80% column (full height) |
+| 1 | centered 85% column (full height) |
 | 2 | left half / right half (intentional break from center+side) |
 | 3 | left 30% / center 40% / right 30% |
 | 4 | center / left split 1/2 height / right full / left-bot |
@@ -98,6 +98,7 @@ Re-runnable safely. After running, log out and back in once if a shortcut doesn'
 | `Meta+Ctrl+Shift+L` | Cycle window layout (centerTile ↔ autoGrid) |
 | `Meta+Ctrl+G` | Set layout: autoGrid |
 | `Meta+Ctrl+C` | Set layout: centerTile |
+| `Meta+Ctrl+Shift+R` | Rebuild tile queues from current windows (ghost-slot recovery) |
 | `Meta+Left/Right/Up/Down` | Focus tile in that direction |
 | `Meta+Shift+Left/Right/Up/Down` | Swap focused window with neighbor in that direction |
 | `Meta+Tab` | Cycle focus through visible tiles |
