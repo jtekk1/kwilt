@@ -53,6 +53,12 @@ function isTileable(w) {
   if (w.onAllDesktops) return false;
   if (!w.output) return false;
   if (!singleDesktop(w)) return false;
+  // Some apps (Electron tray helpers, hidden background windows) pass
+  // normalWindow but never become user-facing. Skip-taskbar AND skip-
+  // switcher together is a reliable signal these aren't real user
+  // windows we should be tiling. We require BOTH because some legit
+  // apps set just one (e.g., a few terminals skip the switcher).
+  if (w.skipTaskbar && w.skipSwitcher) return false;
   return true;
 }
 
@@ -100,9 +106,9 @@ function geometriesCenterTile(n, area) {
   const x = area.x, y = area.y, w = area.width, h = area.height;
   if (n <= 0) return [];
 
-  // N=1: single 80%-wide window, centered horizontally.
+  // N=1: single 85%-wide window, centered horizontally.
   if (n === 1) {
-    const cw = Math.floor(0.8 * w);
+    const cw = Math.floor(0.85 * w);
     return [rect(x + Math.floor((w - cw) / 2), y, cw, h)];
   }
 
@@ -201,6 +207,18 @@ function findContaining(w) {
 }
 
 function applyQueue(key, q, out, desk) {
+  // Defensive prune: drop entries that are no longer tileable, no longer on
+  // this output, or no longer on this desktop. Belt-and-suspenders for state
+  // changes signal handlers may miss (zombie Window refs, externally
+  // fullscreened or destroyed windows, etc.) — without this they'd inflate
+  // visible.length and we'd allocate a tile slot for a window that isn't
+  // actually there, leaving a "ghost" slot showing the desktop.
+  for (let i = q.length - 1; i >= 0; i--) {
+    const w = q[i];
+    if (!isTileable(w) || w.output !== out || singleDesktop(w) !== desk) {
+      q.splice(i, 1);
+    }
+  }
   const split = Math.max(0, q.length - CAP);
   const knocked = q.slice(0, split);
   const visible = q.slice(split);
@@ -253,11 +271,62 @@ function migrate(w) {
   if (newKey) retileKey(newKey);
 }
 
+// External state-change handlers. The minimized/fullScreen handlers
+// distinguish our own writes (which match the window's queue position) from
+// external user actions (which don't) by checking whether the window's new
+// state matches its queue-side expectation.
+function onMinimizedChanged(w) {
+  const found = findContaining(w);
+  if (!found) return;
+  const split = Math.max(0, found.q.length - CAP);
+  if (w.minimized) {
+    // User minimized a visible tile (taskbar / title-bar button / app). Honor
+    // it: drop from the queue so the tile slot collapses instead of leaving
+    // a ghost slot. Knocked-slice transitions are our own — no-op.
+    if (found.idx >= split) {
+      untrack(w);
+      retileKey(found.key);
+    }
+  } else {
+    // External un-minimize. If it's a knocked window coming back, promote it
+    // like activation. Visible-slice transitions are our own — no-op.
+    if (found.idx < split) {
+      found.q.splice(found.idx, 1);
+      found.q.push(w);
+      retileKey(found.key);
+    }
+  }
+}
+
+function onFullScreenChanged(w) {
+  const found = findContaining(w);
+  if (w.fullScreen) {
+    if (found) {
+      untrack(w);
+      retileKey(found.key);
+    }
+  } else if (!found && isTileable(w)) {
+    const newKey = track(w);
+    if (newKey) retileKey(newKey);
+  }
+}
+
+// Some windows die without windowRemoved firing reliably (apps that exit
+// abruptly, transient surfaces, etc.). Listening to per-window `closed`
+// catches those cases and prevents stale refs from squatting on tile slots.
+function onWindowClosed(w) {
+  const key = untrack(w);
+  if (key) retileKey(key);
+}
+
 function bindWindow(w) {
   if (w._ixtliBound) return;
   w._ixtliBound = true;
   if (w.outputChanged) w.outputChanged.connect(function () { migrate(w); });
   if (w.desktopsChanged) w.desktopsChanged.connect(function () { migrate(w); });
+  if (w.minimizedChanged) w.minimizedChanged.connect(function () { onMinimizedChanged(w); });
+  if (w.fullScreenChanged) w.fullScreenChanged.connect(function () { onFullScreenChanged(w); });
+  if (w.closed) w.closed.connect(function () { onWindowClosed(w); });
   if (w.interactiveMoveResizeStarted) {
     w.interactiveMoveResizeStarted.connect(function () {
       w._ixtliDragMode = w.move ? "move" : (w.resize ? "resize" : null);
@@ -466,10 +535,35 @@ function focusLast() {
   }
 }
 
+// Rebuild every queue from the current `workspace.windowList()`. Bound to
+// Meta+Ctrl+Shift+R as a manual recovery hatch — if a ghost slot ever
+// appears, this re-snapshots ground truth without needing a script reload.
+function rebuildQueues() {
+  queues.clear();
+  const existing = workspace.windowList ? workspace.windowList() : (workspace.clientList ? workspace.clientList() : []);
+  for (const w of existing) {
+    // Stale Qt dynamic property from a prior script-load — clear so
+    // bindWindow actually re-connects signals against the new JS engine.
+    w._ixtliBound = false;
+    const key = track(w);
+    if (key) bindWindow(w);
+  }
+  retileAll();
+  log("rebuilt queues from workspace.windowList()");
+}
+
 function init() {
   log("loaded; layout=" + LAYOUT + " cap=" + CAP);
   const existing = workspace.windowList ? workspace.windowList() : (workspace.clientList ? workspace.clientList() : []);
   for (const w of existing) {
+    // _ixtliBound is a Qt dynamic property that persists across script
+    // reloads (the QObject lives in KWin), but the signal connections
+    // bindWindow set up under the previous JS engine were torn down when
+    // it was destroyed. Resetting here ensures we re-connect against the
+    // current engine — otherwise bindWindow short-circuits and our
+    // minimizedChanged / fullScreenChanged / closed listeners never fire
+    // for windows that were open before the reload.
+    w._ixtliBound = false;
     const key = track(w);
     if (key) bindWindow(w);
   }
@@ -497,6 +591,10 @@ function init() {
   registerShortcut("IxtliCycleLayout",  "Ixtli: Cycle window layout",       "Meta+Ctrl+Shift+L", cycleLayout);
   registerShortcut("IxtliLayoutGrid",   "Ixtli: Layout — autoGrid",         "Meta+Ctrl+G",       function () { setLayout("autoGrid"); });
   registerShortcut("IxtliLayoutCenter", "Ixtli: Layout — centerTile",       "Meta+Ctrl+C",       function () { setLayout("centerTile"); });
+
+  // Manual recovery: re-snapshot the queues from workspace.windowList().
+  // Use when you suspect a ghost tile slot — quicker than ./dev-reload.sh.
+  registerShortcut("IxtliRebuildQueues", "Ixtli: Rebuild tile queues (ghost-slot recovery)", "Meta+Ctrl+Shift+R", rebuildQueues);
 
   // Focus by direction (Meta+arrows) and swap by direction (Meta+Shift+arrows).
   // Plasma's KWin defaults (Quick Tile / Move Window to Screen) claim these
