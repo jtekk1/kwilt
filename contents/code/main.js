@@ -15,7 +15,68 @@ const CAPS = { autoGrid: 4, centerTile: 7 };
 let CAP = CAPS[LAYOUT];
 const LOG_PREFIX = "[ixtli]";
 
+// App-launcher shortcuts. Each entry registers a Plasma global shortcut
+// whose callback spawns the given shell command via systemd-run (see
+// spawnApp). Ported from ~/.config/mango/binds; KDE Plasma claims many
+// Meta+<key> defaults so most users will need to clear conflicts under
+// System Settings → Shortcuts → KWin.
+const APP_SHORTCUTS = [
+  // Core launcher
+  { name: "IxtliLaunchKitty",      label: "Ixtli: Launch kitty terminal", keys: "Meta+Return",        cmd: "kitty" },
+  { name: "IxtliLaunchFoot",       label: "Ixtli: Launch foot terminal",  keys: "Meta+Shift+Return",  cmd: "foot -c $HOME/.config/ThemeSwitcher/foot.ini" },
+  { name: "IxtliLaunchBitwarden",  label: "Ixtli: Launch Bitwarden",      keys: "Meta+Slash",         cmd: "bitwarden" },
+  // Native apps (Meta+Shift)
+  { name: "IxtliLaunchBtop",       label: "Ixtli: Launch btop",           keys: "Meta+Shift+B",       cmd: "kitty --title 1280x900 btop" },
+  { name: "IxtliLaunchSpf",        label: "Ixtli: Launch spf",            keys: "Meta+Shift+F",       cmd: "kitty --title 1280x900 spf" },
+  { name: "IxtliLaunchHtop",       label: "Ixtli: Launch htop",           keys: "Meta+Shift+H",       cmd: "kitty --title 800x600 htop -C" },
+  { name: "IxtliLaunchImpala",     label: "Ixtli: Launch impala",         keys: "Meta+Shift+I",       cmd: "kitty --title 800x600 impala" },
+  { name: "IxtliLaunchSpotify",    label: "Ixtli: Launch Spotify",        keys: "Meta+Shift+M",       cmd: "spotify-launcher" },
+  { name: "IxtliLaunchNvim",       label: "Ixtli: Launch nvim",           keys: "Meta+Shift+N",       cmd: "kitty --title 1280x900 nvim" },
+  { name: "IxtliLaunchHelium",     label: "Ixtli: Launch Helium",         keys: "Meta+Shift+T",       cmd: "helium" },
+  { name: "IxtliLaunchBluetui",    label: "Ixtli: Launch bluetui",        keys: "Meta+Shift+U",       cmd: "kitty --title 800x600 bluetui" },
+  { name: "IxtliLaunchWiremix",    label: "Ixtli: Launch wiremix",        keys: "Meta+Shift+W",       cmd: "kitty --title 800x600 wiremix" },
+  { name: "IxtliLaunchYazi",       label: "Ixtli: Launch yazi",           keys: "Meta+Shift+Y",       cmd: "kitty --title 1280x900 yazi" },
+  // Webapps (Meta+Alt)
+  { name: "IxtliWebAudible",       label: "Ixtli: Audible webapp",        keys: "Meta+Alt+A",         cmd: "helium --app=https://www.audible.com" },
+  { name: "IxtliWebDiscord",       label: "Ixtli: Discord webapp",        keys: "Meta+Alt+D",         cmd: "helium --app=https://discord.com" },
+  { name: "IxtliWebGemini",        label: "Ixtli: Gemini webapp",         keys: "Meta+Alt+G",         cmd: "helium --app=https://gemini.google.com/gem/a2e9c5b0e7e1" },
+  { name: "IxtliWebNetflix",       label: "Ixtli: Netflix webapp",        keys: "Meta+Alt+N",         cmd: "helium --app=https://netflix.com" },
+  { name: "IxtliWebUpwork",        label: "Ixtli: Upwork webapp",         keys: "Meta+Alt+U",         cmd: "helium --app=https://upwork.com" },
+  { name: "IxtliWebYouTube",       label: "Ixtli: YouTube webapp",        keys: "Meta+Alt+Y",         cmd: "helium --app=https://youtube.com" },
+  { name: "IxtliWebNerdFonts",     label: "Ixtli: Nerd Fonts cheatsheet", keys: "Ctrl+Shift+Space",   cmd: "helium --app=https://www.nerdfonts.com/cheat-sheet" },
+];
+
 function log(msg) { print(LOG_PREFIX, msg); }
+
+// Spawn a shell command by asking systemd's user manager to start it as a
+// transient unit. KWin scripts have no direct process API — `callDBus` is
+// the escape hatch. We always wrap in /bin/sh -c so shell expansion ($HOME,
+// pipes, quoting) works the way users expect from a shortcut entry.
+let spawnCounter = 0;
+function spawnApp(cmd) {
+  if (typeof callDBus !== "function") {
+    log("callDBus unavailable; cannot spawn: " + cmd);
+    return;
+  }
+  spawnCounter += 1;
+  const unitName = "ixtli-spawn-" + spawnCounter + "-" + (Date.now ? Date.now() : 0) + ".service";
+  const properties = [
+    ["Description", "Ixtli spawn: " + cmd],
+    ["Type", "exec"],
+    ["ExecStart", [["/bin/sh", ["/bin/sh", "-c", cmd], false]]],
+  ];
+  log("spawn: " + cmd);
+  callDBus(
+    "org.freedesktop.systemd1",
+    "/org/freedesktop/systemd1",
+    "org.freedesktop.systemd1.Manager",
+    "StartTransientUnit",
+    unitName,
+    "fail",
+    properties,
+    []
+  );
+}
 
 // Map<string, Window[]>: key = `${outputId}|${desktopId}`
 const queues = new Map();
@@ -329,28 +390,134 @@ function onRemoved(w) {
   if (key) retileKey(key);
 }
 
+// Focus history for the focus-last shortcut: when the active window changes,
+// shift the previous "lastFocused" into "prevFocused" and store the new one.
+let lastFocused = null;
+let prevFocused = null;
+
 function onActivated(w) {
   if (!w) return;
   const found = findContaining(w);
-  if (!found) return;
-  const split = Math.max(0, found.q.length - CAP);
-  if (found.idx < split) {
-    // Knocked-out window activated — promote to most-recent.
-    found.q.splice(found.idx, 1);
-    found.q.push(w);
-    retileKey(found.key);
+  if (found) {
+    const split = Math.max(0, found.q.length - CAP);
+    if (found.idx < split) {
+      // Knocked-out window activated — promote to most-recent.
+      found.q.splice(found.idx, 1);
+      found.q.push(w);
+      retileKey(found.key);
+    }
+  }
+  if (w !== lastFocused) {
+    prevFocused = lastFocused;
+    lastFocused = w;
   }
 }
 
-function cycleLayout() {
-  const names = Object.keys(LAYOUTS);
-  const idx = names.indexOf(LAYOUT);
-  LAYOUT = names[(idx + 1) % names.length];
+function setLayout(name) {
+  if (!LAYOUTS[name] || name === LAYOUT) return;
+  LAYOUT = name;
   CAP = CAPS[LAYOUT];
   log("layout=" + LAYOUT + " cap=" + CAP);
   // retileAll picks up the new geometries function and CAP — windows past
   // the new cap are minimized, windows that fit are unminimized.
   retileAll();
+}
+
+function cycleLayout() {
+  const names = Object.keys(LAYOUTS);
+  setLayout(names[(names.indexOf(LAYOUT) + 1) % names.length]);
+}
+
+// tileSlotOf returns the visible-tile context of a window, or null if the
+// window isn't tiled or is currently knocked out. Used by every keyboard-
+// driven focus/swap so the layout's geometry function is the single source
+// of truth for what "neighbor" means.
+function tileSlotOf(w) {
+  if (!w) return null;
+  const found = findContaining(w);
+  if (!found) return null;
+  const split = Math.max(0, found.q.length - CAP);
+  if (found.idx < split) return null;
+  const desk = singleDesktop(w);
+  if (!desk || !w.output) return null;
+  const visibleCount = found.q.length - split;
+  const tiles = geometries(visibleCount, workArea(w.output, desk));
+  const visIdx = found.idx - split;
+  return { found: found, split: split, visIdx: visIdx, tiles: tiles };
+}
+
+// Find the visible-tile index closest to the current tile's center in the
+// given direction. The y-deviation penalty (for left/right) makes the search
+// prefer same-row neighbors over diagonal ones, and vice versa for up/down.
+function neighborSlot(currentVisIdx, tiles, direction) {
+  const cur = tiles[currentVisIdx];
+  const cx = cur.x + cur.width / 2;
+  const cy = cur.y + cur.height / 2;
+  let bestIdx = -1;
+  let bestDist = Infinity;
+  for (let i = 0; i < tiles.length; i++) {
+    if (i === currentVisIdx) continue;
+    const t = tiles[i];
+    const tx = t.x + t.width / 2;
+    const ty = t.y + t.height / 2;
+    let dist = -1;
+    if (direction === "left"  && tx < cx) dist = (cx - tx) + Math.abs(ty - cy) * 0.5;
+    if (direction === "right" && tx > cx) dist = (tx - cx) + Math.abs(ty - cy) * 0.5;
+    if (direction === "up"    && ty < cy) dist = (cy - ty) + Math.abs(tx - cx) * 0.5;
+    if (direction === "down"  && ty > cy) dist = (ty - cy) + Math.abs(tx - cx) * 0.5;
+    if (dist >= 0 && dist < bestDist) { bestDist = dist; bestIdx = i; }
+  }
+  return bestIdx;
+}
+
+function focusByDirection(direction) {
+  const slot = tileSlotOf(workspace.activeWindow);
+  if (!slot) return;
+  const nextVis = neighborSlot(slot.visIdx, slot.tiles, direction);
+  if (nextVis === -1) return;
+  const target = slot.found.q[slot.split + nextVis];
+  if (target) {
+    workspace.activeWindow = target;
+    log("focus " + direction + " → vis " + nextVis);
+  }
+}
+
+function swapByDirection(direction) {
+  const slot = tileSlotOf(workspace.activeWindow);
+  if (!slot) return;
+  const nextVis = neighborSlot(slot.visIdx, slot.tiles, direction);
+  if (nextVis === -1) return;
+  const srcQ = slot.split + slot.visIdx;
+  const dstQ = slot.split + nextVis;
+  const tmp = slot.found.q[srcQ];
+  slot.found.q[srcQ] = slot.found.q[dstQ];
+  slot.found.q[dstQ] = tmp;
+  log("swap " + direction + " → vis " + nextVis);
+  retileKey(slot.found.key);
+}
+
+function cycleFocus() {
+  const w = workspace.activeWindow;
+  if (!w) return;
+  const found = findContaining(w);
+  if (!found) return;
+  const split = Math.max(0, found.q.length - CAP);
+  const visCount = found.q.length - split;
+  if (visCount < 2) return;
+  const curVis = found.idx >= split ? (found.idx - split) : -1;
+  const nextVis = (curVis + 1) % visCount;
+  const target = found.q[split + nextVis];
+  if (target) {
+    workspace.activeWindow = target;
+    log("cycle focus → vis " + nextVis);
+  }
+}
+
+function focusLast() {
+  if (prevFocused && prevFocused !== workspace.activeWindow) {
+    workspace.activeWindow = prevFocused;
+    log("focus last");
+  }
 }
 
 function init() {
@@ -370,17 +537,39 @@ function init() {
 
   // `typeof` guard rather than direct read — undeclared globals throw
   // ReferenceError on QJSEngine, and not every KWin build exposes this.
-  if (typeof registerShortcut === "function") {
-    registerShortcut(
-      "IxtliCycleLayout",
-      "Ixtli: Cycle window layout",
-      "Meta+Ctrl+Shift+L",
-      cycleLayout
-    );
-    log("shortcut registered: Meta+Ctrl+Shift+L → cycleLayout");
-  } else {
-    log("registerShortcut unavailable; layout cycle keybinding skipped");
+  if (typeof registerShortcut !== "function") {
+    log("registerShortcut unavailable; all keybindings skipped");
+    return;
   }
+
+  // Layout — cycle and direct-set.
+  registerShortcut("IxtliCycleLayout",  "Ixtli: Cycle window layout",       "Meta+Ctrl+Shift+L", cycleLayout);
+  registerShortcut("IxtliLayoutGrid",   "Ixtli: Layout — autoGrid",         "Meta+Ctrl+G",       function () { setLayout("autoGrid"); });
+  registerShortcut("IxtliLayoutCenter", "Ixtli: Layout — centerTile",       "Meta+Ctrl+C",       function () { setLayout("centerTile"); });
+
+  // Focus by direction (Meta+arrows) and swap by direction (Meta+Shift+arrows).
+  // Plasma claims Meta+arrows for Quick Tile by default — clear those in
+  // System Settings → Shortcuts → KWin if Ixtli's binding doesn't fire.
+  registerShortcut("IxtliFocusLeft",  "Ixtli: Focus window left",  "Meta+Left",  function () { focusByDirection("left");  });
+  registerShortcut("IxtliFocusRight", "Ixtli: Focus window right", "Meta+Right", function () { focusByDirection("right"); });
+  registerShortcut("IxtliFocusUp",    "Ixtli: Focus window up",    "Meta+Up",    function () { focusByDirection("up");    });
+  registerShortcut("IxtliFocusDown",  "Ixtli: Focus window down",  "Meta+Down",  function () { focusByDirection("down");  });
+  registerShortcut("IxtliSwapLeft",   "Ixtli: Swap window left",   "Meta+Shift+Left",  function () { swapByDirection("left");  });
+  registerShortcut("IxtliSwapRight",  "Ixtli: Swap window right",  "Meta+Shift+Right", function () { swapByDirection("right"); });
+  registerShortcut("IxtliSwapUp",     "Ixtli: Swap window up",     "Meta+Shift+Up",    function () { swapByDirection("up");    });
+  registerShortcut("IxtliSwapDown",   "Ixtli: Swap window down",   "Meta+Shift+Down",  function () { swapByDirection("down");  });
+
+  // Focus history.
+  registerShortcut("IxtliCycleFocus", "Ixtli: Cycle focus (next tile)", "Meta+Tab", cycleFocus);
+  registerShortcut("IxtliFocusLast",  "Ixtli: Focus last window",       "Meta+U",   focusLast);
+
+  // App launchers — data-driven from APP_SHORTCUTS. Each callback closes
+  // over the cmd string so the loop variable doesn't leak.
+  for (let i = 0; i < APP_SHORTCUTS.length; i++) {
+    const s = APP_SHORTCUTS[i];
+    registerShortcut(s.name, s.label, s.keys, function () { spawnApp(s.cmd); });
+  }
+  log("registered " + APP_SHORTCUTS.length + " app launcher shortcuts");
 }
 
 init();
