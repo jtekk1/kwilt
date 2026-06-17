@@ -38,7 +38,18 @@ if [ -L "$install_path" ]; then
     exit 1
 fi
 
-kpackagetool6 -t KWin/Script -i "$archive" --upgrade
+# kpackagetool6's -i and -u are sibling actions that each take a path
+# argument (NOT a flag on -i). Pick one based on whether the plugin is
+# already installed; otherwise -i errors with "already exists".
+if [ -d "$install_path" ]; then
+    action="-u"
+    verb="upgraded"
+else
+    action="-i"
+    verb="installed"
+fi
+
+kpackagetool6 -t KWin/Script "$action" "$archive"
 echo
-echo "Installed ${plugin_id} ${version}."
+echo "${verb^} ${plugin_id} ${version}."
 echo "Enable in: System Settings → Window Management → KWin Scripts."
