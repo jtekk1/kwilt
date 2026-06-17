@@ -1,0 +1,10 @@
+node_modules/
+npm-debug.log*
+
+# Nix
+result
+result-*
+.direnv/
+
+# Working file for commit messages — see memory/feedback-commit-workflow.
+commit.txt

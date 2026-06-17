@@ -1,0 +1,60 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint (shell, JSON, JS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Shell lint
+        run: shellcheck dev-reload.sh dev-stop.sh .githooks/commit-msg .githooks/pre-commit .githooks/pre-push
+
+      - name: JSON + JS syntax + ESLint
+        run: npm run check
+
+  commit-messages:
+    name: Conventional Commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit messages
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+            commits=$(git rev-list --reverse "${base}..${head}")
+          else
+            commits="${{ github.sha }}"
+          fi
+
+          fail=0
+          for sha in $commits; do
+            tmp=$(mktemp)
+            git log -1 --format=%B "$sha" > "$tmp"
+            if ! .githooks/commit-msg "$tmp"; then
+              echo "::error::Commit ${sha} has an invalid message"
+              fail=1
+            fi
+          done
+          exit "$fail"

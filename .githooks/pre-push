@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Pre-push safety net — re-runs the pre-commit lint pass.
+#
+# Catches the "I forgot to amend after fixing lint" and "I bypassed pre-commit
+# with --no-verify" cases. Identical surface area to pre-commit; if pre-commit
+# passed, this is essentially free.
+
+set -euo pipefail
+
+repo_root=$(git rev-parse --show-toplevel)
+exec "$repo_root/.githooks/pre-commit"

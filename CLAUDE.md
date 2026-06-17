@@ -19,16 +19,44 @@ The README is the canonical spec of what each layout looks like and what behavio
 journalctl -f QT_CATEGORY=js QT_CATEGORY=kwin_scripting   # tail logs; look for "[ixtli]"
 ```
 
-One-time setup (symlink so KWin sees the package):
+One-time setup (after `git clone`):
 
 ```sh
+# Symlink the package so KWin sees it
 mkdir -p "$HOME/.local/share/kwin/scripts"
 ln -s "$PWD" "$HOME/.local/share/kwin/scripts/ixtli"
+
+# Enable the tracked git hooks (.git/hooks/ is not tracked; .githooks/ is)
+git config core.hooksPath .githooks
+
+# Install the lint toolchain (ESLint)
+npm install
 ```
+
+The dev box is Fedora Kinoite (rpm-ostree). `shellcheck` isn't shipped on the base image and layering it requires a reboot, so `flake.nix` provides a Nix dev shell with `shellcheck`, `jq`, and `nodejs_22` — same toolchain CI uses:
+
+```sh
+nix develop          # enter shell with shellcheck/jq/node available
+nix develop -c .githooks/pre-commit    # run the full lint pass one-shot
+```
+
+Outside the dev shell, the `pre-commit` hook detects `shellcheck` is missing and skips that check with a warning — so commits still work, you just don't get local shell lint until you enter the shell.
 
 Interactive experimentation: **Alt+F2 → `wm console`** opens KWin's scripting REPL; its output goes to the same journal stream.
 
-There is no build, lint, or test step. The runtime is KWin itself.
+## Checks
+
+There is no build or test step — the runtime is KWin itself — but there is lint:
+
+```sh
+npm run check         # JSON validity + node --check + ESLint on main.js
+npm run lint          # ESLint only
+shellcheck dev-reload.sh dev-stop.sh .githooks/*
+```
+
+These run automatically as `.githooks/pre-commit` (and again as `pre-push`). The same checks plus per-commit message validation run in `.github/workflows/check.yml` on PRs and pushes to main.
+
+**Commit messages must follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)** — `<type>(<scope>)?!?: <subject>` with type ∈ `feat fix docs style refactor perf test build ci chore revert`. The `commit-msg` hook enforces this locally; the workflow re-checks every commit in a PR.
 
 ## Architecture
 

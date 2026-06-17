@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Pre-commit lint pass for Ixtli.
+#
+# Runs against the working tree (not just staged files) — simple and correct
+# for a project this size. Skips checks whose tools aren't installed, with a
+# warning, so a partially-set-up dev box still commits.
+
+set -euo pipefail
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+fail=0
+
+# Shell scripts — only if shellcheck is installed.
+if command -v shellcheck >/dev/null 2>&1; then
+    shellcheck dev-reload.sh dev-stop.sh \
+        .githooks/commit-msg .githooks/pre-commit .githooks/pre-push \
+        || fail=1
+else
+    echo "warn: shellcheck not installed; skipping shell lint" >&2
+fi
+
+# metadata.json — must be valid JSON.
+if command -v jq >/dev/null 2>&1; then
+    jq . metadata.json >/dev/null || fail=1
+else
+    node -e "JSON.parse(require('fs').readFileSync('metadata.json','utf8'))" || fail=1
+fi
+
+# JS syntax — fast, no deps beyond node.
+node --check contents/code/main.js || fail=1
+
+# ESLint — requires `npm install` to have run.
+if [ -d node_modules ]; then
+    npx --no-install eslint contents/code/main.js || fail=1
+else
+    echo "error: node_modules missing; run 'npm install'" >&2
+    fail=1
+fi
+
+exit "$fail"
