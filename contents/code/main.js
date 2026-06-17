@@ -1,0 +1,358 @@
+"use strict";
+
+// Ixtli — Phase 0 auto-grid tiler.
+//
+// Per (output, virtual desktop) we maintain an ordered queue of tracked
+// windows. The last CAP entries are visible and tiled; the rest are
+// "knocked out" (minimized). Eviction is FIFO; activating a knocked-out
+// window promotes it to the end of the queue.
+
+const LAYOUT = "centerTile";                 // "autoGrid" | "centerTile"
+const CAPS = { autoGrid: 4, centerTile: 7 };
+const CAP = CAPS[LAYOUT];
+const LOG_PREFIX = "[ixtli]";
+
+function log(msg) { print(LOG_PREFIX, msg); }
+
+// Map<string, Window[]>: key = `${outputId}|${desktopId}`
+const queues = new Map();
+
+function outputId(out) {
+  if (!out) return "null";
+  return out.serialNumber || out.name || String(out);
+}
+
+function desktopId(desk) {
+  if (!desk) return "null";
+  return desk.id || desk.x11DesktopNumber || String(desk);
+}
+
+function keyFor(out, desk) {
+  return outputId(out) + "|" + desktopId(desk);
+}
+
+function singleDesktop(w) {
+  if (!w.desktops || w.desktops.length !== 1) return null;
+  return w.desktops[0];
+}
+
+function isTileable(w) {
+  if (!w) return false;
+  if (!w.normalWindow) return false;
+  if (w.fullScreen) return false;
+  if (w.onAllDesktops) return false;
+  if (!w.output) return false;
+  if (!singleDesktop(w)) return false;
+  return true;
+}
+
+function workArea(out, desk) {
+  return workspace.clientArea(KWin.MaximizeArea, out, desk);
+}
+
+function rect(x, y, w, h) { return { x: x, y: y, width: w, height: h }; }
+
+function geometriesAutoGrid(n, area) {
+  const x = area.x, y = area.y, w = area.width, h = area.height;
+  const hw = Math.floor(w / 2);
+  const hh = Math.floor(h / 2);
+  if (n <= 0) return [];
+  if (n === 1) return [rect(x, y, w, h)];
+  if (n === 2) return [
+    rect(x, y, hw, h),
+    rect(x + hw, y, w - hw, h),
+  ];
+  if (n === 3) return [
+    rect(x, y, hw, h),
+    rect(x + hw, y, w - hw, hh),
+    rect(x + hw, y + hh, w - hw, h - hh),
+  ];
+  // n >= 4: TL, TR, BR, BL (clockwise from top-left)
+  return [
+    rect(x, y, hw, hh),
+    rect(x + hw, y, w - hw, hh),
+    rect(x + hw, y + hh, w - hw, h - hh),
+    rect(x, y + hh, hw, h - hh),
+  ];
+}
+
+// Center Tile layout — 40% center column, 30% left, 30% right.
+// Queue order maps to slots:
+//   slot 0 → center (always W1)
+//   slot 1 → top of left column (W2)
+//   slot 2 → top of right column (W3)   [N>=3]
+//   slot 3 → next left-column slot       (W4)
+//   slot 4 → next right-column slot      (W5)
+//   slot 5 → next left-column slot       (W6)
+//   slot 6 → next right-column slot      (W7)
+// Side columns grow top-down: 1 tile → split halves → split thirds.
+function geometriesCenterTile(n, area) {
+  const x = area.x, y = area.y, w = area.width, h = area.height;
+  if (n <= 0) return [];
+
+  // N=1: single 80%-wide window, centered horizontally.
+  if (n === 1) {
+    const cw = Math.floor(0.8 * w);
+    return [rect(x + Math.floor((w - cw) / 2), y, cw, h)];
+  }
+
+  // N=2: plain halves (intentional break from the center+side pattern).
+  if (n === 2) {
+    const hw = Math.floor(w / 2);
+    return [
+      rect(x, y, hw, h),
+      rect(x + hw, y, w - hw, h),
+    ];
+  }
+
+  // N>=3: center 40%, sides 30% each.
+  const sideW = Math.floor(0.3 * w);
+  const centerW = w - 2 * sideW;          // center absorbs any rounding remainder
+  const leftX = x;
+  const centerX = x + sideW;
+  const rightX = x + sideW + centerW;
+  const center = rect(centerX, y, centerW, h);
+
+  if (n === 3) return [
+    center,
+    rect(leftX, y, sideW, h),                                    // left full
+    rect(rightX, y, sideW, h),                                    // right full
+  ];
+
+  if (n === 4) {
+    const halfH = Math.floor(h / 2);
+    return [
+      center,
+      rect(leftX, y, sideW, halfH),                    // left-top  (W2)
+      rect(rightX, y, sideW, h),                        // right full (W3)
+      rect(leftX, y + halfH, sideW, h - halfH),                // left-bot  (W4)
+    ];
+  }
+
+  if (n === 5) {
+    const halfH = Math.floor(h / 2);
+    return [
+      center,
+      rect(leftX, y, sideW, halfH),                    // left-top  (W2)
+      rect(rightX, y, sideW, halfH),                    // right-top (W3)
+      rect(leftX, y + halfH, sideW, h - halfH),                // left-bot  (W4)
+      rect(rightX, y + halfH, sideW, h - halfH),                // right-bot (W5)
+    ];
+  }
+
+  if (n === 6) {
+    const thirdH = Math.floor(h / 3);
+    const halfH = Math.floor(h / 2);
+    return [
+      center,
+      rect(leftX, y, sideW, thirdH),             // left-top  (W2)
+      rect(rightX, y, sideW, halfH),              // right-top (W3)
+      rect(leftX, y + thirdH, sideW, thirdH),             // left-mid  (W4)
+      rect(rightX, y + halfH, sideW, h - halfH),          // right-bot (W5)
+      rect(leftX, y + 2 * thirdH, sideW, h - 2 * thirdH),     // left-bot  (W6)
+    ];
+  }
+
+  // n >= 7: both columns in thirds. Capped at 7 by CAP.
+  const thirdH = Math.floor(h / 3);
+  return [
+    center,
+    rect(leftX, y, sideW, thirdH),                 // left-top  (W2)
+    rect(rightX, y, sideW, thirdH),                 // right-top (W3)
+    rect(leftX, y + thirdH, sideW, thirdH),                 // left-mid  (W4)
+    rect(rightX, y + thirdH, sideW, thirdH),                 // right-mid (W5)
+    rect(leftX, y + 2 * thirdH, sideW, h - 2 * thirdH),         // left-bot  (W6)
+    rect(rightX, y + 2 * thirdH, sideW, h - 2 * thirdH),         // right-bot (W7)
+  ];
+}
+
+const LAYOUTS = {
+  autoGrid: geometriesAutoGrid,
+  centerTile: geometriesCenterTile,
+};
+
+function geometries(n, area) {
+  return LAYOUTS[LAYOUT](n, area);
+}
+
+function queueFor(out, desk, create) {
+  const key = keyFor(out, desk);
+  let q = queues.get(key);
+  if (!q && create) { q = []; queues.set(key, q); }
+  return q;
+}
+
+function findContaining(w) {
+  for (const [key, q] of queues) {
+    const idx = q.indexOf(w);
+    if (idx !== -1) return { key: key, q: q, idx: idx };
+  }
+  return null;
+}
+
+function applyQueue(key, q, out, desk) {
+  const split = Math.max(0, q.length - CAP);
+  const knocked = q.slice(0, split);
+  const visible = q.slice(split);
+  const geos = geometries(visible.length, workArea(out, desk));
+  for (const w of knocked) {
+    if (!w.minimized) w.minimized = true;
+  }
+  visible.forEach(function (w, i) {
+    if (w.minimized) w.minimized = false;
+    // Unmaximize before setting geometry, else maximize state overrides us.
+    if (w.maximizable) w.setMaximize(false, false);
+    w.frameGeometry = geos[i];
+  });
+  log("apply " + key + " n=" + q.length + " visible=" + visible.length + " knocked=" + knocked.length);
+}
+
+function retileKey(key) {
+  const q = queues.get(key);
+  if (!q || q.length === 0) { queues.delete(key); return; }
+  const member = q[0];
+  const desk = singleDesktop(member);
+  if (!member.output || !desk) return;
+  applyQueue(key, q, member.output, desk);
+}
+
+function retileAll() {
+  const keys = Array.from(queues.keys());
+  for (const k of keys) retileKey(k);
+}
+
+function track(w) {
+  if (!isTileable(w)) return null;
+  const desk = singleDesktop(w);
+  const q = queueFor(w.output, desk, true);
+  if (q.indexOf(w) === -1) q.push(w);
+  return keyFor(w.output, desk);
+}
+
+function untrack(w) {
+  const found = findContaining(w);
+  if (!found) return null;
+  found.q.splice(found.idx, 1);
+  return found.key;
+}
+
+function migrate(w) {
+  const oldKey = untrack(w);
+  const newKey = track(w);
+  if (oldKey && oldKey !== newKey) retileKey(oldKey);
+  if (newKey) retileKey(newKey);
+}
+
+function bindWindow(w) {
+  if (w._ixtliBound) return;
+  w._ixtliBound = true;
+  if (w.outputChanged) w.outputChanged.connect(function () { migrate(w); });
+  if (w.desktopsChanged) w.desktopsChanged.connect(function () { migrate(w); });
+  if (w.interactiveMoveResizeStarted) {
+    w.interactiveMoveResizeStarted.connect(function () {
+      w._ixtliDragMode = w.move ? "move" : (w.resize ? "resize" : null);
+    });
+  }
+  if (w.interactiveMoveResizeFinished) {
+    w.interactiveMoveResizeFinished.connect(function () {
+      const mode = w._ixtliDragMode;
+      w._ixtliDragMode = null;
+      if (mode === "move") {
+        handleDrop(w);
+      } else if (mode === "resize") {
+        // Tiles own geometry; snap back.
+        const found = findContaining(w);
+        if (found) retileKey(found.key);
+      }
+    });
+  }
+}
+
+function handleDrop(w) {
+  const found = findContaining(w);
+  if (!found) return;
+
+  const split = Math.max(0, found.q.length - CAP);
+  const visible = found.q.slice(split);
+  const srcVisIdx = visible.indexOf(w);
+  if (srcVisIdx === -1) {
+    // Source isn't in the visible set (shouldn't happen for a draggable window).
+    retileKey(found.key);
+    return;
+  }
+
+  const desk = singleDesktop(w);
+  if (!desk || !w.output) { retileKey(found.key); return; }
+
+  const area = workArea(w.output, desk);
+  const tiles = geometries(visible.length, area);
+
+  const fg = w.frameGeometry;
+  const cx = fg.x + fg.width / 2;
+  const cy = fg.y + fg.height / 2;
+
+  let dstVisIdx = -1;
+  for (let i = 0; i < tiles.length; i++) {
+    const t = tiles[i];
+    if (cx >= t.x && cx < t.x + t.width && cy >= t.y && cy < t.y + t.height) {
+      dstVisIdx = i;
+      break;
+    }
+  }
+
+  if (dstVisIdx === -1 || dstVisIdx === srcVisIdx) {
+    retileKey(found.key);  // snap back
+    return;
+  }
+
+  const srcQIdx = split + srcVisIdx;
+  const dstQIdx = split + dstVisIdx;
+  const tmp = found.q[srcQIdx];
+  found.q[srcQIdx] = found.q[dstQIdx];
+  found.q[dstQIdx] = tmp;
+  log("swap slot " + srcVisIdx + " <-> " + dstVisIdx);
+  retileKey(found.key);
+}
+
+function onAdded(w) {
+  const key = track(w);
+  if (!key) return;
+  bindWindow(w);
+  retileKey(key);
+}
+
+function onRemoved(w) {
+  const key = untrack(w);
+  if (key) retileKey(key);
+}
+
+function onActivated(w) {
+  if (!w) return;
+  const found = findContaining(w);
+  if (!found) return;
+  const split = Math.max(0, found.q.length - CAP);
+  if (found.idx < split) {
+    // Knocked-out window activated — promote to most-recent.
+    found.q.splice(found.idx, 1);
+    found.q.push(w);
+    retileKey(found.key);
+  }
+}
+
+function init() {
+  log("loaded; cap=" + CAP);
+  const existing = workspace.windowList ? workspace.windowList() : (workspace.clientList ? workspace.clientList() : []);
+  for (const w of existing) {
+    const key = track(w);
+    if (key) bindWindow(w);
+  }
+  retileAll();
+
+  workspace.windowAdded.connect(onAdded);
+  workspace.windowRemoved.connect(onRemoved);
+  workspace.windowActivated.connect(onActivated);
+  workspace.screensChanged.connect(retileAll);
+  if (workspace.desktopLayoutChanged) workspace.desktopLayoutChanged.connect(retileAll);
+}
+
+init();

@@ -1,0 +1,13 @@
+{
+    "KPackageStructure": "KWin/Script",
+    "KPlugin": {
+        "Id": "ixtli",
+        "Name": "Ixtli",
+        "Description": "Auto-grid tiling for KWin (Phase 0).",
+        "Version": "0.1.0",
+        "EnabledByDefault": false,
+        "Authors": []
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js"
+}
