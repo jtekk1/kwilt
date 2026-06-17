@@ -15,68 +15,14 @@ const CAPS = { autoGrid: 4, centerTile: 7 };
 let CAP = CAPS[LAYOUT];
 const LOG_PREFIX = "[ixtli]";
 
-// App-launcher shortcuts. Each entry registers a Plasma global shortcut
-// whose callback spawns the given shell command via systemd-run (see
-// spawnApp). Ported from ~/.config/mango/binds; KDE Plasma claims many
-// Meta+<key> defaults so most users will need to clear conflicts under
-// System Settings → Shortcuts → KWin.
-const APP_SHORTCUTS = [
-  // Core launcher
-  { name: "IxtliLaunchKitty",      label: "Ixtli: Launch kitty terminal", keys: "Meta+Return",        cmd: "kitty" },
-  { name: "IxtliLaunchFoot",       label: "Ixtli: Launch foot terminal",  keys: "Meta+Shift+Return",  cmd: "foot -c $HOME/.config/ThemeSwitcher/foot.ini" },
-  { name: "IxtliLaunchBitwarden",  label: "Ixtli: Launch Bitwarden",      keys: "Meta+Slash",         cmd: "bitwarden" },
-  // Native apps (Meta+Shift)
-  { name: "IxtliLaunchBtop",       label: "Ixtli: Launch btop",           keys: "Meta+Shift+B",       cmd: "kitty --title 1280x900 btop" },
-  { name: "IxtliLaunchSpf",        label: "Ixtli: Launch spf",            keys: "Meta+Shift+F",       cmd: "kitty --title 1280x900 spf" },
-  { name: "IxtliLaunchHtop",       label: "Ixtli: Launch htop",           keys: "Meta+Shift+H",       cmd: "kitty --title 800x600 htop -C" },
-  { name: "IxtliLaunchImpala",     label: "Ixtli: Launch impala",         keys: "Meta+Shift+I",       cmd: "kitty --title 800x600 impala" },
-  { name: "IxtliLaunchSpotify",    label: "Ixtli: Launch Spotify",        keys: "Meta+Shift+M",       cmd: "spotify-launcher" },
-  { name: "IxtliLaunchNvim",       label: "Ixtli: Launch nvim",           keys: "Meta+Shift+N",       cmd: "kitty --title 1280x900 nvim" },
-  { name: "IxtliLaunchHelium",     label: "Ixtli: Launch Helium",         keys: "Meta+Shift+T",       cmd: "helium" },
-  { name: "IxtliLaunchBluetui",    label: "Ixtli: Launch bluetui",        keys: "Meta+Shift+U",       cmd: "kitty --title 800x600 bluetui" },
-  { name: "IxtliLaunchWiremix",    label: "Ixtli: Launch wiremix",        keys: "Meta+Shift+W",       cmd: "kitty --title 800x600 wiremix" },
-  { name: "IxtliLaunchYazi",       label: "Ixtli: Launch yazi",           keys: "Meta+Shift+Y",       cmd: "kitty --title 1280x900 yazi" },
-  // Webapps (Meta+Alt)
-  { name: "IxtliWebAudible",       label: "Ixtli: Audible webapp",        keys: "Meta+Alt+A",         cmd: "helium --app=https://www.audible.com" },
-  { name: "IxtliWebDiscord",       label: "Ixtli: Discord webapp",        keys: "Meta+Alt+D",         cmd: "helium --app=https://discord.com" },
-  { name: "IxtliWebGemini",        label: "Ixtli: Gemini webapp",         keys: "Meta+Alt+G",         cmd: "helium --app=https://gemini.google.com/gem/a2e9c5b0e7e1" },
-  { name: "IxtliWebNetflix",       label: "Ixtli: Netflix webapp",        keys: "Meta+Alt+N",         cmd: "helium --app=https://netflix.com" },
-  { name: "IxtliWebUpwork",        label: "Ixtli: Upwork webapp",         keys: "Meta+Alt+U",         cmd: "helium --app=https://upwork.com" },
-  { name: "IxtliWebYouTube",       label: "Ixtli: YouTube webapp",        keys: "Meta+Alt+Y",         cmd: "helium --app=https://youtube.com" },
-  { name: "IxtliWebNerdFonts",     label: "Ixtli: Nerd Fonts cheatsheet", keys: "Ctrl+Shift+Space",   cmd: "helium --app=https://www.nerdfonts.com/cheat-sheet" },
-];
-
 function log(msg) { print(LOG_PREFIX, msg); }
 
-// Spawn a shell command by asking systemd's user manager to start it as a
-// transient unit. KWin scripts have no direct process API — `callDBus` is
-// the escape hatch. We always wrap in /bin/sh -c so shell expansion ($HOME,
-// pipes, quoting) works the way users expect from a shortcut entry.
-let spawnCounter = 0;
-function spawnApp(cmd) {
-  if (typeof callDBus !== "function") {
-    log("callDBus unavailable; cannot spawn: " + cmd);
-    return;
-  }
-  spawnCounter += 1;
-  const unitName = "ixtli-spawn-" + spawnCounter + "-" + (Date.now ? Date.now() : 0) + ".service";
-  const properties = [
-    ["Description", "Ixtli spawn: " + cmd],
-    ["Type", "exec"],
-    ["ExecStart", [["/bin/sh", ["/bin/sh", "-c", cmd], false]]],
-  ];
-  log("spawn: " + cmd);
-  callDBus(
-    "org.freedesktop.systemd1",
-    "/org/freedesktop/systemd1",
-    "org.freedesktop.systemd1.Manager",
-    "StartTransientUnit",
-    unitName,
-    "fail",
-    properties,
-    []
-  );
-}
+// App-launcher shortcuts are NOT registered here. KWin scripts can't spawn
+// processes (no exec/spawn API; callDBus → systemd-run doesn't marshal the
+// nested-variant ExecStart arg). Launcher bindings live in KDE's native
+// Custom Shortcuts mechanism and are seeded by scripts/setup-shortcuts.sh
+// (which also clears Plasma KWin defaults like Quick Tile that conflict
+// with the window-mgmt shortcuts below).
 
 // Map<string, Window[]>: key = `${outputId}|${desktopId}`
 const queues = new Map();
@@ -529,6 +475,11 @@ function init() {
   }
   retileAll();
 
+  // Seed focus history so Meta+U works after the FIRST window switch
+  // (rather than the second). Without this, prevFocused stays null until
+  // onActivated fires twice with different windows.
+  lastFocused = workspace.activeWindow;
+
   workspace.windowAdded.connect(onAdded);
   workspace.windowRemoved.connect(onRemoved);
   workspace.windowActivated.connect(onActivated);
@@ -548,8 +499,9 @@ function init() {
   registerShortcut("IxtliLayoutCenter", "Ixtli: Layout — centerTile",       "Meta+Ctrl+C",       function () { setLayout("centerTile"); });
 
   // Focus by direction (Meta+arrows) and swap by direction (Meta+Shift+arrows).
-  // Plasma claims Meta+arrows for Quick Tile by default — clear those in
-  // System Settings → Shortcuts → KWin if Ixtli's binding doesn't fire.
+  // Plasma's KWin defaults (Quick Tile / Move Window to Screen) claim these
+  // key combos and win the dispatch. scripts/setup-shortcuts.sh disables
+  // them in kglobalshortcutsrc; run it once per machine.
   registerShortcut("IxtliFocusLeft",  "Ixtli: Focus window left",  "Meta+Left",  function () { focusByDirection("left");  });
   registerShortcut("IxtliFocusRight", "Ixtli: Focus window right", "Meta+Right", function () { focusByDirection("right"); });
   registerShortcut("IxtliFocusUp",    "Ixtli: Focus window up",    "Meta+Up",    function () { focusByDirection("up");    });
@@ -559,17 +511,10 @@ function init() {
   registerShortcut("IxtliSwapUp",     "Ixtli: Swap window up",     "Meta+Shift+Up",    function () { swapByDirection("up");    });
   registerShortcut("IxtliSwapDown",   "Ixtli: Swap window down",   "Meta+Shift+Down",  function () { swapByDirection("down");  });
 
-  // Focus history.
+  // Focus history. Meta+Tab is claimed by KWin's Walk Through Windows
+  // (alongside Alt+Tab) — setup-shortcuts.sh strips just the Meta+Tab half.
   registerShortcut("IxtliCycleFocus", "Ixtli: Cycle focus (next tile)", "Meta+Tab", cycleFocus);
   registerShortcut("IxtliFocusLast",  "Ixtli: Focus last window",       "Meta+U",   focusLast);
-
-  // App launchers — data-driven from APP_SHORTCUTS. Each callback closes
-  // over the cmd string so the loop variable doesn't leak.
-  for (let i = 0; i < APP_SHORTCUTS.length; i++) {
-    const s = APP_SHORTCUTS[i];
-    registerShortcut(s.name, s.label, s.keys, function () { spawnApp(s.cmd); });
-  }
-  log("registered " + APP_SHORTCUTS.length + " app launcher shortcuts");
 }
 
 init();
