@@ -201,6 +201,18 @@ function findContaining(w) {
 }
 
 function applyQueue(key, q, out, desk) {
+  // Defensive prune: drop entries that are no longer tileable, no longer on
+  // this output, or no longer on this desktop. Belt-and-suspenders for state
+  // changes signal handlers may miss (zombie Window refs, externally
+  // fullscreened or destroyed windows, etc.) — without this they'd inflate
+  // visible.length and we'd allocate a tile slot for a window that isn't
+  // actually there, leaving a "ghost" slot showing the desktop.
+  for (let i = q.length - 1; i >= 0; i--) {
+    const w = q[i];
+    if (!isTileable(w) || w.output !== out || singleDesktop(w) !== desk) {
+      q.splice(i, 1);
+    }
+  }
   const split = Math.max(0, q.length - CAP);
   const knocked = q.slice(0, split);
   const visible = q.slice(split);
@@ -253,11 +265,62 @@ function migrate(w) {
   if (newKey) retileKey(newKey);
 }
 
+// External state-change handlers. The minimized/fullScreen handlers
+// distinguish our own writes (which match the window's queue position) from
+// external user actions (which don't) by checking whether the window's new
+// state matches its queue-side expectation.
+function onMinimizedChanged(w) {
+  const found = findContaining(w);
+  if (!found) return;
+  const split = Math.max(0, found.q.length - CAP);
+  if (w.minimized) {
+    // User minimized a visible tile (taskbar / title-bar button / app). Honor
+    // it: drop from the queue so the tile slot collapses instead of leaving
+    // a ghost slot. Knocked-slice transitions are our own — no-op.
+    if (found.idx >= split) {
+      untrack(w);
+      retileKey(found.key);
+    }
+  } else {
+    // External un-minimize. If it's a knocked window coming back, promote it
+    // like activation. Visible-slice transitions are our own — no-op.
+    if (found.idx < split) {
+      found.q.splice(found.idx, 1);
+      found.q.push(w);
+      retileKey(found.key);
+    }
+  }
+}
+
+function onFullScreenChanged(w) {
+  const found = findContaining(w);
+  if (w.fullScreen) {
+    if (found) {
+      untrack(w);
+      retileKey(found.key);
+    }
+  } else if (!found && isTileable(w)) {
+    const newKey = track(w);
+    if (newKey) retileKey(newKey);
+  }
+}
+
+// Some windows die without windowRemoved firing reliably (apps that exit
+// abruptly, transient surfaces, etc.). Listening to per-window `closed`
+// catches those cases and prevents stale refs from squatting on tile slots.
+function onWindowClosed(w) {
+  const key = untrack(w);
+  if (key) retileKey(key);
+}
+
 function bindWindow(w) {
   if (w._ixtliBound) return;
   w._ixtliBound = true;
   if (w.outputChanged) w.outputChanged.connect(function () { migrate(w); });
   if (w.desktopsChanged) w.desktopsChanged.connect(function () { migrate(w); });
+  if (w.minimizedChanged) w.minimizedChanged.connect(function () { onMinimizedChanged(w); });
+  if (w.fullScreenChanged) w.fullScreenChanged.connect(function () { onFullScreenChanged(w); });
+  if (w.closed) w.closed.connect(function () { onWindowClosed(w); });
   if (w.interactiveMoveResizeStarted) {
     w.interactiveMoveResizeStarted.connect(function () {
       w._ixtliDragMode = w.move ? "move" : (w.resize ? "resize" : null);
