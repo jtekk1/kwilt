@@ -74,12 +74,38 @@ Look for `[ixtli]` lines. The KWin Scripting Console (`Alt+F2` → `wm console`)
 - No config file — boot-time `LAYOUT` and per-layout caps are constants in `main.js`. Set the boot default via `./dev-reload.sh grid|center`; cycle at runtime with the shortcut below.
 - Windows on all desktops (or pinned to multiple desktops) stay floating.
 - Knocked-out pile has no tab UI yet.
-- No keyboard shortcuts for focus/swap.
+- App-launcher shortcuts assume the executables (`kitty`, `helium`, `bitwarden`, etc.) are on `$PATH`. If a launcher silently does nothing, that's the most likely cause — the journal will log `spawn: <cmd>` regardless of whether the binary exists.
 
 ## Shortcuts
+
+Defaults are best-effort; KDE Plasma 6 already binds many `Meta+<key>` combinations (Quick Tile, task switcher). On first install, clear conflicting Plasma defaults in **System Settings → Shortcuts → KWin** (search for "Quick Tile" and "Switch Window") for the arrow-key and `Meta+Tab` shortcuts to fire. Rebind any Ixtli shortcut from the same screen by searching for the `Ixtli:` prefix.
+
+### Layout
 
 | Default | Action |
 |---|---|
 | `Meta+Ctrl+Shift+L` | Cycle window layout (centerTile ↔ autoGrid) |
+| `Meta+Ctrl+G` | Set layout: autoGrid |
+| `Meta+Ctrl+C` | Set layout: centerTile |
 
-Rebind in **System Settings → Shortcuts → KWin → Ixtli: Cycle window layout**.
+### Focus & swap
+
+| Default | Action |
+|---|---|
+| `Meta+Left/Right/Up/Down` | Focus tile in that direction |
+| `Meta+Shift+Left/Right/Up/Down` | Swap focused window with neighbor in that direction |
+| `Meta+Tab` | Cycle focus through visible tiles |
+| `Meta+U` | Focus most-recently-focused window (toggle) |
+
+### App launchers
+
+Launcher callbacks ask systemd's user manager to start the command as a transient unit (`callDBus` → `org.freedesktop.systemd1.Manager.StartTransientUnit`). KWin scripts can't spawn processes directly; this is the workaround. All commands run via `/bin/sh -c …` so `$HOME` and pipes work.
+
+| Default | Action |
+|---|---|
+| `Meta+Return` | `kitty` |
+| `Meta+Shift+Return` | `foot -c $HOME/.config/ThemeSwitcher/foot.ini` |
+| `Meta+/` | `bitwarden` |
+| `Meta+Shift+B/F/H/I/M/N/T/U/W/Y` | btop / spf / htop / impala / spotify / nvim / helium / bluetui / wiremix / yazi (kitty-wrapped where applicable) |
+| `Meta+Alt+A/D/G/N/U/Y` | Helium webapps: Audible / Discord / Gemini / Netflix / Upwork / YouTube |
+| `Ctrl+Shift+Space` | Nerd Fonts cheatsheet (Helium webapp) |
