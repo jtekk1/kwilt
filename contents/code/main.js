@@ -7,9 +7,12 @@
 // "knocked out" (minimized). Eviction is FIFO; activating a knocked-out
 // window promotes it to the end of the queue.
 
-const LAYOUT = "centerTile";                 // "autoGrid" | "centerTile"
+// LAYOUT and CAP are mutable so the cycle-layout shortcut can switch at
+// runtime. The initial value sets the boot-time default — set it directly
+// or via ./dev-reload.sh grid|center.
+let LAYOUT = "centerTile";                   // "autoGrid" | "centerTile"
 const CAPS = { autoGrid: 4, centerTile: 7 };
-const CAP = CAPS[LAYOUT];
+let CAP = CAPS[LAYOUT];
 const LOG_PREFIX = "[ixtli]";
 
 function log(msg) { print(LOG_PREFIX, msg); }
@@ -339,8 +342,19 @@ function onActivated(w) {
   }
 }
 
+function cycleLayout() {
+  const names = Object.keys(LAYOUTS);
+  const idx = names.indexOf(LAYOUT);
+  LAYOUT = names[(idx + 1) % names.length];
+  CAP = CAPS[LAYOUT];
+  log("layout=" + LAYOUT + " cap=" + CAP);
+  // retileAll picks up the new geometries function and CAP — windows past
+  // the new cap are minimized, windows that fit are unminimized.
+  retileAll();
+}
+
 function init() {
-  log("loaded; cap=" + CAP);
+  log("loaded; layout=" + LAYOUT + " cap=" + CAP);
   const existing = workspace.windowList ? workspace.windowList() : (workspace.clientList ? workspace.clientList() : []);
   for (const w of existing) {
     const key = track(w);
@@ -353,6 +367,20 @@ function init() {
   workspace.windowActivated.connect(onActivated);
   workspace.screensChanged.connect(retileAll);
   if (workspace.desktopLayoutChanged) workspace.desktopLayoutChanged.connect(retileAll);
+
+  // `typeof` guard rather than direct read — undeclared globals throw
+  // ReferenceError on QJSEngine, and not every KWin build exposes this.
+  if (typeof registerShortcut === "function") {
+    registerShortcut(
+      "IxtliCycleLayout",
+      "Ixtli: Cycle window layout",
+      "Meta+Ctrl+Shift+L",
+      cycleLayout
+    );
+    log("shortcut registered: Meta+Ctrl+Shift+L → cycleLayout");
+  } else {
+    log("registerShortcut unavailable; layout cycle keybinding skipped");
+  }
 }
 
 init();
