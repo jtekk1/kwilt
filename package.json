@@ -7,7 +7,9 @@
     "lint": "eslint contents/code/main.js",
     "check:json": "node -e \"JSON.parse(require('fs').readFileSync('metadata.json','utf8'))\"",
     "check:js": "node --check contents/code/main.js",
-    "check": "npm run check:json && npm run check:js && npm run lint"
+    "check": "npm run check:json && npm run check:js && npm run lint",
+    "package": "scripts/package.sh",
+    "install:local": "scripts/install-local.sh"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

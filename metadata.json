@@ -3,10 +3,16 @@
     "KPlugin": {
         "Id": "ixtli",
         "Name": "Ixtli",
-        "Description": "Auto-grid tiling for KWin (Phase 0).",
+        "Description": "Per-output, per-desktop window tiling with auto-grid and center-tile layouts.",
         "Version": "0.1.0",
+        "License": "GPL-3.0-or-later",
         "EnabledByDefault": false,
-        "Authors": []
+        "Authors": [
+            {
+                "Name": "jtekk",
+                "Email": "jtekk@jtekk.dev"
+            }
+        ]
     },
     "X-Plasma-API": "javascript",
     "X-Plasma-MainScript": "code/main.js"

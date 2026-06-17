@@ -6,5 +6,8 @@ result
 result-*
 .direnv/
 
+# Built .kwinscript archives
+build/
+
 # Working file for commit messages — see memory/feedback-commit-workflow.
 commit.txt

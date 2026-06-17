@@ -51,12 +51,25 @@ There is no build or test step — the runtime is KWin itself — but there is l
 ```sh
 npm run check         # JSON validity + node --check + ESLint on main.js
 npm run lint          # ESLint only
-shellcheck dev-reload.sh dev-stop.sh .githooks/*
+shellcheck dev-reload.sh dev-stop.sh scripts/*.sh .githooks/*
 ```
 
 These run automatically as `.githooks/pre-commit` (and again as `pre-push`). The same checks plus per-commit message validation run in `.github/workflows/check.yml` on PRs and pushes to main.
 
 **Commit messages must follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)** — `<type>(<scope>)?!?: <subject>` with type ∈ `feat fix docs style refactor perf test build ci chore revert`. The `commit-msg` hook enforces this locally; the workflow re-checks every commit in a PR.
+
+## Packaging
+
+A `.kwinscript` is the install artifact for KWin scripts — a ZIP with `metadata.json` at the root. KDE Store, GitHub releases, and `kpackagetool6` all consume the same file.
+
+```sh
+npm run package        # → build/ixtli-<VERSION>.kwinscript
+npm run install:local  # kpackagetool6 -t KWin/Script -i build/ixtli-<VERSION>.kwinscript --upgrade
+```
+
+`scripts/package.sh` reads `KPlugin.Id` and `KPlugin.Version` from `metadata.json` and zips an **explicit allowlist** — `metadata.json`, `contents/`, `README.md`, `LICENSE`. Dev-only files (`.githooks/`, `flake.nix`, `package.json`, `node_modules/`, etc.) never leak in. Bump `KPlugin.Version` in `metadata.json` to cut a new artifact; the filename tracks it automatically.
+
+`scripts/install-local.sh` is for end-to-end testing the packaged archive (not the dev loop — `./dev-reload.sh` is still the fast inner loop via the symlink). It **refuses** to clobber the dev symlink at `~/.local/share/kwin/scripts/ixtli`; remove the symlink (`rm ~/.local/share/kwin/scripts/ixtli`) to switch to packaged-install mode, re-add it (`ln -s "$PWD" ~/.local/share/kwin/scripts/ixtli`) to switch back.
 
 ## Architecture
 
