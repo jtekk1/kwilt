@@ -43,6 +43,25 @@ Pattern: while N is below the next perfect grid (2x2, 2x3, 3x3, 3x4), W1 spans t
 | 12 | 3x4 grid (row-major) |
 | 13+ | oldest is knocked out (minimized) — visible cap is 12 |
 
+### `monocle` (cap = 1)
+
+One window visible at full work area; everything else is knocked out. Alt-tab onto a knocked window to promote it. Useful for focus mode / presentations.
+
+| N | Layout |
+|---|---|
+| 1 | full work area |
+| 2+ | one visible, all others knocked out (alt-tab cycles) |
+
+### `dual` (cap = 2)
+
+At most two windows visible, side-by-side. Adding a 3rd window knocks out the oldest. Useful for diff views, paired apps, doc + IDE.
+
+| N | Layout |
+|---|---|
+| 1 | full work area |
+| 2 | left half / right half |
+| 3+ | oldest is knocked out — visible cap is 2 |
+
 ### Shared behavior
 
 - Only `normalWindow` top-levels tile. Dialogs, popups, fullscreen, multi-desktop windows stay floating.
@@ -143,9 +162,11 @@ Re-runnable safely. After running, log out and back in once if a shortcut doesn'
 
 | Default | Action |
 |---|---|
-| `Meta+Ctrl+Shift+L` | Cycle window layout (centerTile ↔ autoGrid) |
+| `Meta+Ctrl+Shift+L` | Cycle window layout (autoGrid → centerTile → monocle → dual) |
 | `Meta+Ctrl+G` | Set layout: autoGrid |
 | `Meta+Ctrl+C` | Set layout: centerTile |
+| `Meta+Ctrl+M` | Set layout: monocle |
+| `Meta+Ctrl+D` | Set layout: dual |
 | `Meta+Ctrl+Shift+R` | Rebuild tile queues from current windows (ghost-slot recovery) |
 | `Meta+Left/Right/Up/Down` | Focus tile in that direction |
 | `Meta+Shift+Left/Right/Up/Down` | Swap focused window with neighbor in that direction |
