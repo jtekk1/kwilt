@@ -7,15 +7,55 @@
 // "knocked out" (minimized). Eviction is FIFO; activating a knocked-out
 // window promotes it to the end of the queue.
 
-// LAYOUT and CAP are mutable so the cycle-layout shortcut can switch at
-// runtime. The initial value sets the boot-time default — set it directly
-// or via ./dev-reload.sh grid|center.
-let LAYOUT = "centerTile";                   // "autoGrid" | "centerTile"
-const CAPS = { autoGrid: 9, centerTile: 7 };
-let CAP = CAPS[LAYOUT];
 const LOG_PREFIX = "[ixtli]";
 
 function log(msg) { print(LOG_PREFIX, msg); }
+
+// Read a tunable option at script-load time. KWin injects `readConfig` as a
+// global that reads from kwinrc under the script's own config namespace; if
+// the build is old or the key is unset, `defaultValue` wins. We coerce
+// against the default's type because readConfig can return QVariant
+// strings ("0.85") even when the caller wanted a number.
+function cfg(key, defaultValue) {
+  if (typeof readConfig !== "function") return defaultValue;
+  const raw = readConfig(key, defaultValue);
+  if (typeof defaultValue === "number") {
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : defaultValue;
+  }
+  if (typeof defaultValue === "boolean") {
+    return raw === true || raw === "true";
+  }
+  return raw;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+// Tunables. Override with:
+//   kwriteconfig6 --file kwinrc --group Script-ixtli --key <Key> <value>
+// then reload the script (./dev-reload.sh or relogin). Defaults match the
+// hardcoded values that were here before this commit, so an unconfigured
+// kwinrc is a no-op.
+const CFG = (function () {
+  const layoutRaw = cfg("Layout", "centerTile");
+  const layout = (layoutRaw === "autoGrid" || layoutRaw === "centerTile")
+    ? layoutRaw : "centerTile";
+  return {
+    layout: layout,
+    capAutoGrid:        Math.round(clamp(cfg("CapAutoGrid", 9),         1, 9)),
+    capCenterTile:      Math.round(clamp(cfg("CapCenterTile", 7),       1, 7)),
+    centerTileWidth1:               clamp(cfg("CenterTileWidth1", 0.85), 0.5, 1.0),
+    centerTileSideWidth:            clamp(cfg("CenterTileSideWidth", 0.30), 0.15, 0.45),
+  };
+})();
+
+// LAYOUT and CAP are mutable so the cycle-layout shortcut can switch at
+// runtime. The initial value comes from CFG.layout (kwinrc-tunable).
+let LAYOUT = CFG.layout;
+const CAPS = { autoGrid: CFG.capAutoGrid, centerTile: CFG.capCenterTile };
+let CAP = CAPS[LAYOUT];
 
 // App-launcher shortcuts are NOT registered here. KWin scripts can't spawn
 // processes (no exec/spawn API; callDBus → systemd-run doesn't marshal the
@@ -197,9 +237,9 @@ function geometriesCenterTile(n, area) {
   const x = area.x, y = area.y, w = area.width, h = area.height;
   if (n <= 0) return [];
 
-  // N=1: single 85%-wide window, centered horizontally.
+  // N=1: single column at CFG.centerTileWidth1 fraction of width, centered.
   if (n === 1) {
-    const cw = Math.floor(0.85 * w);
+    const cw = Math.floor(CFG.centerTileWidth1 * w);
     return [rect(x + Math.floor((w - cw) / 2), y, cw, h)];
   }
 
@@ -212,9 +252,10 @@ function geometriesCenterTile(n, area) {
     ];
   }
 
-  // N>=3: center 40%, sides 30% each.
-  const sideW = Math.floor(0.3 * w);
-  const centerW = w - 2 * sideW;          // center absorbs any rounding remainder
+  // N>=3: sides take CFG.centerTileSideWidth fraction each; center absorbs
+  // the rest (and any floor-rounding remainder).
+  const sideW = Math.floor(CFG.centerTileSideWidth * w);
+  const centerW = w - 2 * sideW;
   const leftX = x;
   const centerX = x + sideW;
   const rightX = x + sideW + centerW;

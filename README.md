@@ -43,6 +43,28 @@ Pattern: while N is below the next perfect grid (2x2, 2x3, 3x3), W1 spans the fu
 - Only `normalWindow` top-levels tile. Dialogs, popups, fullscreen, multi-desktop windows stay floating.
 - Activating a knocked-out window (alt-tab onto it) promotes it back into the visible set; the new-oldest is knocked out in its place.
 - Dragging a tiled window onto another tile swaps them. Drag onto empty/own tile or resize → snap back.
+
+## Configuration
+
+Tunables live in `~/.config/kwinrc` under `[Script-ixtli]`. Read once at script load — change them, then reload (`./dev-reload.sh` or relogin) for the new values to take effect. There is no GUI yet (planned).
+
+| Key | Type | Default | Range | Notes |
+|---|---|---|---|---|
+| `Layout` | string | `centerTile` | `centerTile` / `autoGrid` | Boot-time layout. `Meta+Ctrl+Shift+L` cycles at runtime. |
+| `CapAutoGrid` | int | `9` | `1`–`9` | Visible cap before knockout in autoGrid. |
+| `CapCenterTile` | int | `7` | `1`–`7` | Visible cap before knockout in centerTile. |
+| `CenterTileWidth1` | float | `0.85` | `0.5`–`1.0` | N=1 column width as fraction of work area in centerTile. |
+| `CenterTileSideWidth` | float | `0.30` | `0.15`–`0.45` | Each side column's width fraction at N=3+ in centerTile; center absorbs the rest. |
+
+Set via:
+
+```sh
+kwriteconfig6 --file kwinrc --group Script-ixtli --key Layout autoGrid
+kwriteconfig6 --file kwinrc --group Script-ixtli --key CenterTileWidth1 0.9
+./dev-reload.sh
+```
+
+Out-of-range values are clamped to the listed range. Invalid `Layout` strings fall back to `centerTile`.
 - Geometry snaps. Visual transitions rely on KDE's built-in desktop effects (System Settings → Workspace Behavior → Desktop Effects).
 
 ## Install (development)
