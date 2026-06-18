@@ -46,7 +46,11 @@ Pattern: while N is below the next perfect grid (2x2, 2x3, 3x3), W1 spans the fu
 
 ## Configuration
 
-Tunables live in `~/.config/kwinrc` under `[Script-ixtli]`. Read once at script load — change them, then reload (`./dev-reload.sh` or relogin) for the new values to take effect. There is no GUI yet (planned).
+Two equivalent paths — both read/write `~/.config/kwinrc` under `[Script-ixtli]`.
+
+**GUI** — System Settings → Window Management → KWin Scripts → click the gear icon next to *Ixtli* (or the *Configure* button, depending on Plasma version). Form built from `contents/ui/config.qml` against the kcfg schema in `contents/config/main.xml`. **Apply** writes the kwinrc keys; values take effect on the next script reload (toggle Ixtli off and on in the same dialog, or relogin).
+
+**CLI / scriptable** — change values directly and reload:
 
 | Key | Type | Default | Range | Notes |
 |---|---|---|---|---|

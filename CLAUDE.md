@@ -81,7 +81,21 @@ Single file: `contents/code/main.js` (~360 lines). `metadata.json` is the KPacka
 
 **Shortcut registration.** All window-mgmt shortcuts are registered in `init()` under a `typeof registerShortcut === "function"` guard (older KWin builds may not expose it; reading an undeclared global throws ReferenceError on QJSEngine). Layout / focus / swap shortcuts close over small handlers that call into the tiling functions.
 
-**Tunables — `CFG` and `cfg()`.** Hardcoded constants are gone for the five exposed options (`Layout`, `CapAutoGrid`, `CapCenterTile`, `CenterTileWidth1`, `CenterTileSideWidth`). At script load the `CFG` const is built from `cfg(key, default)` calls, which wrap KWin's `readConfig` global and read from kwinrc `[Script-ixtli]`. Defaults match the prior hardcoded values, so an unconfigured user is unaffected. Type coercion against the default plus a `clamp()` keeps the rest of `main.js` from having to defend against junk values. **The config is read once at init** — there is no live-reload signal; users `kwriteconfig6` + reload. If you add a new tunable, mirror the entry in `CFG` and document the key + range in the README's Configuration table.
+**Tunables — `CFG` and `cfg()`.** Hardcoded constants are gone for the five exposed options (`Layout`, `CapAutoGrid`, `CapCenterTile`, `CenterTileWidth1`, `CenterTileSideWidth`). At script load the `CFG` const is built from `cfg(key, default)` calls, which wrap KWin's `readConfig` global and read from kwinrc `[Script-ixtli]`. Defaults match the prior hardcoded values, so an unconfigured user is unaffected. Type coercion against the default plus a `clamp()` keeps the rest of `main.js` from having to defend against junk values. **The config is read once at init** — there is no live-reload signal; users either save in the Configure dialog (which writes kwinrc and triggers a reload via KCM) or run `kwriteconfig6` + `./dev-reload.sh`.
+
+**Config UI: Qt Designer XML, not QML.** Plasma 6 KWin scripts use `contents/ui/config.ui` (Qt Designer's XML schema, edited as plain XML — there's no live designer required) and not `config.qml`, despite the rest of Plasma being QtQuick. KCM bridges the .ui form to kcfg via the `kcfg_<KeyName>` widget-name convention. Two other one-time metadata.json hints are required:
+- `KPlugin.Icon` — without it, the script row has a blank icon in System Settings.
+- `X-KDE-ConfigModule: "kwin/effects/configs/kcm_kwin4_genericscripted"` — without it, the gear/configure icon never appears even with a valid `config.ui` and `main.xml`.
+
+Reference: `/usr/share/kwin-wayland/scripts/videowall/` is the canonical example shipped with Plasma 6.
+
+**Four-file tunable contract.** A new option requires lockstep edits in:
+- `contents/code/main.js` — add a field in `CFG` reading via `cfg(key, default)` with appropriate clamp/validation.
+- `contents/config/main.xml` — declare the `<entry>` with the same name, type, default, and (where applicable) min/max. `<kcfgfile name=""/>` and `<group name=""/>` stay empty by convention — `kcm_kwin4_genericscripted` fills both in from `KPlugin.Id` at runtime, routing storage to kwinrc's `[Script-ixtli]`.
+- `contents/ui/config.ui` — add a widget named `kcfg_<KeyName>` of a sensible Qt class (`QCheckBox` for bool, `QSpinBox` for int, `QDoubleSpinBox` for double, `QComboBox` with items for string-choice, `QLineEdit` for free-form string).
+- README's Configuration table — end-user documentation with key, default, range.
+
+The group name `Script-ixtli` is what KWin's `readConfig` infers from `KPlugin.Id`. Don't change it without updating the README invocations.
 
 **Per-(output, virtualDesktop) queues.** State lives in `queues: Map<string, Window[]>`, keyed by `outputId|desktopId`. Within each queue, the **last `CAP` entries are visible and tiled**; everything before that is "knocked out" (minimized). Eviction is FIFO. Activating a knocked-out window (`onActivated`) promotes it to the end of its queue and the new-oldest is knocked out. `CAP` is per-layout (defaults `autoGrid: 9`, `centerTile: 7`, tunable via `CapAutoGrid`/`CapCenterTile`); changing it requires understanding both layouts' geometry functions.
 

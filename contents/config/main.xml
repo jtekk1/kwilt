@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  kcfg schema for Ixtli's tunables. KCM uses this to type-check the widget
+  bindings in contents/ui/config.ui (via the `kcfg_<KeyName>` widget-name
+  convention) and to enforce per-entry min/max.
+
+  Plasma 6 KWin scripts leave `<kcfgfile name=""/>` and `<group name=""/>`
+  empty by convention — kcm_kwin4_genericscripted fills both in at runtime
+  from the script's KPlugin.Id ("ixtli"), routing storage to kwinrc's
+  [Script-ixtli] group. main.js reads from the same group via cfg().
+-->
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+                          http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+    <kcfgfile name=""/>
+    <group name="">
+
+        <entry name="Layout" type="String">
+            <default>centerTile</default>
+        </entry>
+
+        <entry name="CapAutoGrid" type="Int">
+            <default>9</default>
+            <min>1</min>
+            <max>9</max>
+        </entry>
+
+        <entry name="CapCenterTile" type="Int">
+            <default>7</default>
+            <min>1</min>
+            <max>7</max>
+        </entry>
+
+        <entry name="CenterTileWidth1" type="Double">
+            <default>0.85</default>
+            <min>0.5</min>
+            <max>1.0</max>
+        </entry>
+
+        <entry name="CenterTileSideWidth" type="Double">
+            <default>0.30</default>
+            <min>0.15</min>
+            <max>0.45</max>
+        </entry>
+
+    </group>
+</kcfg>
