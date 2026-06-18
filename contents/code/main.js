@@ -844,8 +844,10 @@ function init() {
 
   // Layout — cycle and direct-set.
   registerShortcut("IxtliCycleLayout",  "Ixtli: Cycle window layout",       "Meta+Ctrl+Shift+L", cycleLayout);
-  registerShortcut("IxtliLayoutGrid",   "Ixtli: Layout — autoGrid",         "Meta+Ctrl+G",       function () { setLayout("autoGrid"); });
-  registerShortcut("IxtliLayoutCenter", "Ixtli: Layout — centerTile",       "Meta+Ctrl+C",       function () { setLayout("centerTile"); });
+  registerShortcut("IxtliLayoutGrid",    "Ixtli: Layout — autoGrid",        "Meta+Ctrl+G",       function () { setLayout("autoGrid"); });
+  registerShortcut("IxtliLayoutCenter",  "Ixtli: Layout — centerTile",      "Meta+Ctrl+C",       function () { setLayout("centerTile"); });
+  registerShortcut("IxtliLayoutMonocle", "Ixtli: Layout — monocle",         "Meta+Ctrl+M",       function () { setLayout("monocle"); });
+  registerShortcut("IxtliLayoutDual",    "Ixtli: Layout — dual",            "Meta+Ctrl+D",       function () { setLayout("dual"); });
 
   // Manual recovery: re-snapshot the queues from workspace.windowList().
   // Use when you suspect a ghost tile slot — quicker than ./dev-reload.sh.

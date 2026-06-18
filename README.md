@@ -162,9 +162,11 @@ Re-runnable safely. After running, log out and back in once if a shortcut doesn'
 
 | Default | Action |
 |---|---|
-| `Meta+Ctrl+Shift+L` | Cycle window layout (centerTile ↔ autoGrid) |
+| `Meta+Ctrl+Shift+L` | Cycle window layout (autoGrid → centerTile → monocle → dual) |
 | `Meta+Ctrl+G` | Set layout: autoGrid |
 | `Meta+Ctrl+C` | Set layout: centerTile |
+| `Meta+Ctrl+M` | Set layout: monocle |
+| `Meta+Ctrl+D` | Set layout: dual |
 | `Meta+Ctrl+Shift+R` | Rebuild tile queues from current windows (ghost-slot recovery) |
 | `Meta+Left/Right/Up/Down` | Focus tile in that direction |
 | `Meta+Shift+Left/Right/Up/Down` | Swap focused window with neighbor in that direction |
