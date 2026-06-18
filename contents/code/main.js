@@ -11,7 +11,7 @@
 // runtime. The initial value sets the boot-time default — set it directly
 // or via ./dev-reload.sh grid|center.
 let LAYOUT = "centerTile";                   // "autoGrid" | "centerTile"
-const CAPS = { autoGrid: 4, centerTile: 7 };
+const CAPS = { autoGrid: 9, centerTile: 7 };
 let CAP = CAPS[LAYOUT];
 const LOG_PREFIX = "[ixtli]";
 
@@ -68,27 +68,118 @@ function workArea(out, desk) {
 
 function rect(x, y, w, h) { return { x: x, y: y, width: w, height: h }; }
 
+// autoGrid — pattern: while N is below the next perfect MxM grid, W1 spans
+// the full left column; once N hits the perfect grid, every cell equalizes.
+// 2x2 frame for N=3/4, 2x3 frame for N=5/6, 3x3 frame for N=7/8/9.
+// Last column / last row absorbs floor-rounding remainders.
 function geometriesAutoGrid(n, area) {
   const x = area.x, y = area.y, w = area.width, h = area.height;
-  const hw = Math.floor(w / 2);
-  const hh = Math.floor(h / 2);
   if (n <= 0) return [];
   if (n === 1) return [rect(x, y, w, h)];
-  if (n === 2) return [
-    rect(x, y, hw, h),
-    rect(x + hw, y, w - hw, h),
-  ];
-  if (n === 3) return [
-    rect(x, y, hw, h),
-    rect(x + hw, y, w - hw, hh),
-    rect(x + hw, y + hh, w - hw, h - hh),
-  ];
-  // n >= 4: TL, TR, BR, BL (clockwise from top-left)
+
+  // N=2: left half / right half.
+  if (n === 2) {
+    const hw = Math.floor(w / 2);
+    return [
+      rect(x, y, hw, h),
+      rect(x + hw, y, w - hw, h),
+    ];
+  }
+
+  // 2x2 frame.
+  if (n === 3 || n === 4) {
+    const hw = Math.floor(w / 2);
+    const hh = Math.floor(h / 2);
+    if (n === 3) {
+      // W1 spans full left column.
+      return [
+        rect(x, y, hw, h),
+        rect(x + hw, y, w - hw, hh),
+        rect(x + hw, y + hh, w - hw, h - hh),
+      ];
+    }
+    // N=4: TL / TR / BR / BL (clockwise). Intentional break from row-major
+    // — preserved for continuity with the original autoGrid behavior.
+    return [
+      rect(x, y, hw, hh),
+      rect(x + hw, y, w - hw, hh),
+      rect(x + hw, y + hh, w - hw, h - hh),
+      rect(x, y + hh, hw, h - hh),
+    ];
+  }
+
+  // 2x3 frame.
+  if (n === 5 || n === 6) {
+    const cw = Math.floor(w / 3);
+    const lastCw = w - 2 * cw;
+    const rh = Math.floor(h / 2);
+    const lastRh = h - rh;
+    if (n === 5) {
+      // W1 spans full left column; W2..W5 fill the right 2x2 block.
+      return [
+        rect(x, y, cw, h),
+        rect(x + cw, y, cw, rh),
+        rect(x + 2 * cw, y, lastCw, rh),
+        rect(x + cw, y + rh, cw, lastRh),
+        rect(x + 2 * cw, y + rh, lastCw, lastRh),
+      ];
+    }
+    // N=6: perfect 2x3, row-major.
+    return [
+      rect(x, y, cw, rh),
+      rect(x + cw, y, cw, rh),
+      rect(x + 2 * cw, y, lastCw, rh),
+      rect(x, y + rh, cw, lastRh),
+      rect(x + cw, y + rh, cw, lastRh),
+      rect(x + 2 * cw, y + rh, lastCw, lastRh),
+    ];
+  }
+
+  // 3x3 frame. n is 7, 8, or 9 (CAP caps at 9).
+  const cw = Math.floor(w / 3);
+  const lastCw = w - 2 * cw;
+  const rh = Math.floor(h / 3);
+  const lastRh = h - 2 * rh;
+
+  if (n === 7) {
+    // W1 spans full left column (all 3 rows); W2..W7 fill the right 2x3 block.
+    return [
+      rect(x, y, cw, h),
+      rect(x + cw, y, cw, rh),
+      rect(x + 2 * cw, y, lastCw, rh),
+      rect(x + cw, y + rh, cw, rh),
+      rect(x + 2 * cw, y + rh, lastCw, rh),
+      rect(x + cw, y + 2 * rh, cw, lastRh),
+      rect(x + 2 * cw, y + 2 * rh, lastCw, lastRh),
+    ];
+  }
+
+  if (n === 8) {
+    // W1 spans top 2 rows of left column (2h/3 tall); bottom row is a normal
+    // 3-cell strip. Smooth shrink between N=7 (3 rows) and N=9 (1 row).
+    return [
+      rect(x, y, cw, 2 * rh),
+      rect(x + cw, y, cw, rh),
+      rect(x + 2 * cw, y, lastCw, rh),
+      rect(x + cw, y + rh, cw, rh),
+      rect(x + 2 * cw, y + rh, lastCw, rh),
+      rect(x, y + 2 * rh, cw, lastRh),
+      rect(x + cw, y + 2 * rh, cw, lastRh),
+      rect(x + 2 * cw, y + 2 * rh, lastCw, lastRh),
+    ];
+  }
+
+  // n >= 9: perfect 3x3, row-major.
   return [
-    rect(x, y, hw, hh),
-    rect(x + hw, y, w - hw, hh),
-    rect(x + hw, y + hh, w - hw, h - hh),
-    rect(x, y + hh, hw, h - hh),
+    rect(x, y, cw, rh),
+    rect(x + cw, y, cw, rh),
+    rect(x + 2 * cw, y, lastCw, rh),
+    rect(x, y + rh, cw, rh),
+    rect(x + cw, y + rh, cw, rh),
+    rect(x + 2 * cw, y + rh, lastCw, rh),
+    rect(x, y + 2 * rh, cw, lastRh),
+    rect(x + cw, y + 2 * rh, cw, lastRh),
+    rect(x + 2 * cw, y + 2 * rh, lastCw, lastRh),
   ];
 }
 

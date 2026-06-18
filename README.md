@@ -21,15 +21,22 @@ Selected via the `LAYOUT` constant at the top of `contents/code/main.js`. Two ar
 | 7 | center / left 1/3 / right 1/3 / left-mid / right-mid / left-bot / right-bot |
 | 8+ | oldest knocked out — visible cap is 7 |
 
-### `autoGrid` (cap = 4)
+### `autoGrid` (cap = 9)
+
+Pattern: while N is below the next perfect grid (2x2, 2x3, 3x3), W1 spans the full left column; once N hits the perfect grid, every cell equalizes.
 
 | N | Layout |
 |---|---|
 | 1 | full work area |
 | 2 | left half / right half |
-| 3 | left full-height / right top / right bottom |
-| 4 | TL / TR / BR / BL (clockwise) |
-| 5+ | oldest is knocked out (minimized) — visible cap is 4 |
+| 3 | 2x2 frame; W1 spans full left column |
+| 4 | TL / TR / BR / BL (clockwise — intentional break from row-major) |
+| 5 | 2x3 frame; W1 spans full left column, W2..W5 fill the right 2x2 |
+| 6 | 2x3 grid (row-major) |
+| 7 | 3x3 frame; W1 spans full left column, W2..W7 fill the right 2x3 |
+| 8 | 3x3 frame; W1 spans top 2 rows of left column, bottom row is a normal 3-cell strip |
+| 9 | 3x3 grid (row-major) |
+| 10+ | oldest is knocked out (minimized) — visible cap is 9 |
 
 ### Shared behavior
 
