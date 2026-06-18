@@ -6,9 +6,9 @@ Personal KWin tiling script.
 
 Selected via the `LAYOUT` constant at the top of `contents/code/main.js`. Two are implemented:
 
-### `centerTile` (current default; cap = 7)
+### `centerTile` (current default; cap = 9)
 
-40% center column, 30% left and right. Sides grow downward as windows are added.
+40% center column, 30% left and right. Sides grow downward as windows are added; when side counts are uneven, **left fills first**.
 
 | N | Layout |
 |---|---|
@@ -19,11 +19,13 @@ Selected via the `LAYOUT` constant at the top of `contents/code/main.js`. Two ar
 | 5 | center / left 1/2 / right 1/2 / left-bot / right-bot |
 | 6 | center / left 1/3 / right 1/2 / left-mid / right-bot / left-bot |
 | 7 | center / left 1/3 / right 1/3 / left-mid / right-mid / left-bot / right-bot |
-| 8+ | oldest knocked out — visible cap is 7 |
+| 8 | center / 4 left (quarters) / 3 right (thirds) — asymmetric, left fills first |
+| 9 | center / 4 left (quarters) / 4 right (quarters) |
+| 10+ | oldest knocked out — visible cap is 9 |
 
-### `autoGrid` (cap = 9)
+### `autoGrid` (cap = 12)
 
-Pattern: while N is below the next perfect grid (2x2, 2x3, 3x3), W1 spans the full left column; once N hits the perfect grid, every cell equalizes.
+Pattern: while N is below the next perfect grid (2x2, 2x3, 3x3, 3x4), W1 spans the full left column; once N hits the perfect grid, every cell equalizes.
 
 | N | Layout |
 |---|---|
@@ -36,7 +38,10 @@ Pattern: while N is below the next perfect grid (2x2, 2x3, 3x3), W1 spans the fu
 | 7 | 3x3 frame; W1 spans full left column, W2..W7 fill the right 2x3 |
 | 8 | 3x3 frame; W1 spans top 2 rows of left column, bottom row is a normal 3-cell strip |
 | 9 | 3x3 grid (row-major) |
-| 10+ | oldest is knocked out (minimized) — visible cap is 9 |
+| 10 | 3x4 frame; W1 spans full left column, W2..W10 fill the right 3x3 |
+| 11 | 3x4 frame; W1 spans top 2 rows of left column, bottom row is a normal 4-cell strip |
+| 12 | 3x4 grid (row-major) |
+| 13+ | oldest is knocked out (minimized) — visible cap is 12 |
 
 ### Shared behavior
 
@@ -48,15 +53,15 @@ Pattern: while N is below the next perfect grid (2x2, 2x3, 3x3), W1 spans the fu
 
 Two equivalent paths — both read/write `~/.config/kwinrc` under `[Script-ixtli]`.
 
-**GUI** — System Settings → Window Management → KWin Scripts → click the gear icon next to *Ixtli* (or the *Configure* button, depending on Plasma version). Form built from `contents/ui/config.qml` against the kcfg schema in `contents/config/main.xml`. **Apply** writes the kwinrc keys; values take effect on the next script reload (toggle Ixtli off and on in the same dialog, or relogin).
+**GUI** — System Settings → Window Management → KWin Scripts → click the gear icon next to *Ixtli* (or the *Configure* button, depending on Plasma version). Form built from `contents/ui/config.ui` against the kcfg schema in `contents/config/main.xml`. **Apply** writes the kwinrc keys; values take effect on the next script reload (toggle Ixtli off and on in the same dialog, or relogin).
 
 **CLI / scriptable** — change values directly and reload:
 
 | Key | Type | Default | Range | Notes |
 |---|---|---|---|---|
 | `Layout` | string | `centerTile` | `centerTile` / `autoGrid` | Boot-time layout. `Meta+Ctrl+Shift+L` cycles at runtime. |
-| `CapAutoGrid` | int | `9` | `1`–`9` | Visible cap before knockout in autoGrid. |
-| `CapCenterTile` | int | `7` | `1`–`7` | Visible cap before knockout in centerTile. |
+| `CapAutoGrid` | int | `12` | `1`–`12` | Visible cap before knockout in autoGrid. |
+| `CapCenterTile` | int | `9` | `1`–`9` | Visible cap before knockout in centerTile. |
 | `CenterTileWidth1` | float | `0.85` | `0.5`–`1.0` | N=1 column width as fraction of work area in centerTile. |
 | `CenterTileSideWidth` | float | `0.30` | `0.15`–`0.45` | Each side column's width fraction at N=3+ in centerTile; center absorbs the rest. |
 

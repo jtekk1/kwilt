@@ -44,8 +44,8 @@ const CFG = (function () {
     ? layoutRaw : "centerTile";
   return {
     layout: layout,
-    capAutoGrid:        Math.round(clamp(cfg("CapAutoGrid", 9),         1, 9)),
-    capCenterTile:      Math.round(clamp(cfg("CapCenterTile", 7),       1, 7)),
+    capAutoGrid:        Math.round(clamp(cfg("CapAutoGrid", 12),        1, 12)),
+    capCenterTile:      Math.round(clamp(cfg("CapCenterTile", 9),       1, 9)),
     centerTileWidth1:               clamp(cfg("CenterTileWidth1", 0.85), 0.5, 1.0),
     centerTileSideWidth:            clamp(cfg("CenterTileSideWidth", 0.30), 0.15, 0.45),
   };
@@ -175,32 +175,47 @@ function geometriesAutoGrid(n, area) {
     ];
   }
 
-  // 3x3 frame. n is 7, 8, or 9 (CAP caps at 9).
-  const cw = Math.floor(w / 3);
-  const lastCw = w - 2 * cw;
-  const rh = Math.floor(h / 3);
-  const lastRh = h - 2 * rh;
+  // 3x3 frame (n is 7, 8, or 9).
+  if (n >= 7 && n <= 9) {
+    const cw = Math.floor(w / 3);
+    const lastCw = w - 2 * cw;
+    const rh = Math.floor(h / 3);
+    const lastRh = h - 2 * rh;
 
-  if (n === 7) {
-    // W1 spans full left column (all 3 rows); W2..W7 fill the right 2x3 block.
+    if (n === 7) {
+      // W1 spans full left column (all 3 rows); W2..W7 fill the right 2x3 block.
+      return [
+        rect(x, y, cw, h),
+        rect(x + cw, y, cw, rh),
+        rect(x + 2 * cw, y, lastCw, rh),
+        rect(x + cw, y + rh, cw, rh),
+        rect(x + 2 * cw, y + rh, lastCw, rh),
+        rect(x + cw, y + 2 * rh, cw, lastRh),
+        rect(x + 2 * cw, y + 2 * rh, lastCw, lastRh),
+      ];
+    }
+
+    if (n === 8) {
+      // W1 spans top 2 rows of left column (2h/3 tall); bottom row is a normal
+      // 3-cell strip. Smooth shrink between N=7 (3 rows) and N=9 (1 row).
+      return [
+        rect(x, y, cw, 2 * rh),
+        rect(x + cw, y, cw, rh),
+        rect(x + 2 * cw, y, lastCw, rh),
+        rect(x + cw, y + rh, cw, rh),
+        rect(x + 2 * cw, y + rh, lastCw, rh),
+        rect(x, y + 2 * rh, cw, lastRh),
+        rect(x + cw, y + 2 * rh, cw, lastRh),
+        rect(x + 2 * cw, y + 2 * rh, lastCw, lastRh),
+      ];
+    }
+
+    // n === 9: perfect 3x3, row-major.
     return [
-      rect(x, y, cw, h),
+      rect(x, y, cw, rh),
       rect(x + cw, y, cw, rh),
       rect(x + 2 * cw, y, lastCw, rh),
-      rect(x + cw, y + rh, cw, rh),
-      rect(x + 2 * cw, y + rh, lastCw, rh),
-      rect(x + cw, y + 2 * rh, cw, lastRh),
-      rect(x + 2 * cw, y + 2 * rh, lastCw, lastRh),
-    ];
-  }
-
-  if (n === 8) {
-    // W1 spans top 2 rows of left column (2h/3 tall); bottom row is a normal
-    // 3-cell strip. Smooth shrink between N=7 (3 rows) and N=9 (1 row).
-    return [
-      rect(x, y, cw, 2 * rh),
-      rect(x + cw, y, cw, rh),
-      rect(x + 2 * cw, y, lastCw, rh),
+      rect(x, y + rh, cw, rh),
       rect(x + cw, y + rh, cw, rh),
       rect(x + 2 * cw, y + rh, lastCw, rh),
       rect(x, y + 2 * rh, cw, lastRh),
@@ -209,17 +224,60 @@ function geometriesAutoGrid(n, area) {
     ];
   }
 
-  // n >= 9: perfect 3x3, row-major.
+  // 3x4 frame (n is 10, 11, or 12; CAP caps at 12). Same W1-spans-left-column
+  // progression as the 3x3 frame, just one column wider.
+  const cw = Math.floor(w / 4);
+  const lastCw = w - 3 * cw;
+  const rh = Math.floor(h / 3);
+  const lastRh = h - 2 * rh;
+
+  if (n === 10) {
+    // W1 spans full left column (all 3 rows); W2..W10 fill the right 3x3 block.
+    return [
+      rect(x, y, cw, h),
+      rect(x + cw, y, cw, rh),
+      rect(x + 2 * cw, y, cw, rh),
+      rect(x + 3 * cw, y, lastCw, rh),
+      rect(x + cw, y + rh, cw, rh),
+      rect(x + 2 * cw, y + rh, cw, rh),
+      rect(x + 3 * cw, y + rh, lastCw, rh),
+      rect(x + cw, y + 2 * rh, cw, lastRh),
+      rect(x + 2 * cw, y + 2 * rh, cw, lastRh),
+      rect(x + 3 * cw, y + 2 * rh, lastCw, lastRh),
+    ];
+  }
+
+  if (n === 11) {
+    // W1 spans top 2 rows of left column; bottom row is a normal 4-cell strip.
+    return [
+      rect(x, y, cw, 2 * rh),
+      rect(x + cw, y, cw, rh),
+      rect(x + 2 * cw, y, cw, rh),
+      rect(x + 3 * cw, y, lastCw, rh),
+      rect(x + cw, y + rh, cw, rh),
+      rect(x + 2 * cw, y + rh, cw, rh),
+      rect(x + 3 * cw, y + rh, lastCw, rh),
+      rect(x, y + 2 * rh, cw, lastRh),
+      rect(x + cw, y + 2 * rh, cw, lastRh),
+      rect(x + 2 * cw, y + 2 * rh, cw, lastRh),
+      rect(x + 3 * cw, y + 2 * rh, lastCw, lastRh),
+    ];
+  }
+
+  // n >= 12: perfect 3x4, row-major.
   return [
     rect(x, y, cw, rh),
     rect(x + cw, y, cw, rh),
-    rect(x + 2 * cw, y, lastCw, rh),
+    rect(x + 2 * cw, y, cw, rh),
+    rect(x + 3 * cw, y, lastCw, rh),
     rect(x, y + rh, cw, rh),
     rect(x + cw, y + rh, cw, rh),
-    rect(x + 2 * cw, y + rh, lastCw, rh),
+    rect(x + 2 * cw, y + rh, cw, rh),
+    rect(x + 3 * cw, y + rh, lastCw, rh),
     rect(x, y + 2 * rh, cw, lastRh),
     rect(x + cw, y + 2 * rh, cw, lastRh),
-    rect(x + 2 * cw, y + 2 * rh, lastCw, lastRh),
+    rect(x + 2 * cw, y + 2 * rh, cw, lastRh),
+    rect(x + 3 * cw, y + 2 * rh, lastCw, lastRh),
   ];
 }
 
@@ -301,16 +359,52 @@ function geometriesCenterTile(n, area) {
     ];
   }
 
-  // n >= 7: both columns in thirds. Capped at 7 by CAP.
-  const thirdH = Math.floor(h / 3);
+  if (n === 7) {
+    // Both columns in thirds. Symmetric.
+    const thirdH = Math.floor(h / 3);
+    return [
+      center,
+      rect(leftX, y, sideW, thirdH),                                          // left-top  (W2)
+      rect(rightX, y, sideW, thirdH),                                         // right-top (W3)
+      rect(leftX, y + thirdH, sideW, thirdH),                                 // left-mid  (W4)
+      rect(rightX, y + thirdH, sideW, thirdH),                                // right-mid (W5)
+      rect(leftX, y + 2 * thirdH, sideW, h - 2 * thirdH),                     // left-bot  (W6)
+      rect(rightX, y + 2 * thirdH, sideW, h - 2 * thirdH),                    // right-bot (W7)
+    ];
+  }
+
+  if (n === 8) {
+    // 4 left (quarters) + 3 right (thirds). Asymmetric — continues the
+    // "left fills first when uneven" pattern from N=4 and N=6.
+    const quarterH = Math.floor(h / 4);
+    const lastQuarterH = h - 3 * quarterH;
+    const thirdH = Math.floor(h / 3);
+    const lastThirdH = h - 2 * thirdH;
+    return [
+      center,
+      rect(leftX, y, sideW, quarterH),                                        // left-1  (W2)
+      rect(rightX, y, sideW, thirdH),                                         // right-1 (W3)
+      rect(leftX, y + quarterH, sideW, quarterH),                             // left-2  (W4)
+      rect(rightX, y + thirdH, sideW, thirdH),                                // right-2 (W5)
+      rect(leftX, y + 2 * quarterH, sideW, quarterH),                         // left-3  (W6)
+      rect(rightX, y + 2 * thirdH, sideW, lastThirdH),                        // right-3 (W7)
+      rect(leftX, y + 3 * quarterH, sideW, lastQuarterH),                     // left-4  (W8)
+    ];
+  }
+
+  // n >= 9: both columns in quarters. Capped at 9 by CAP.
+  const quarterH = Math.floor(h / 4);
+  const lastQuarterH = h - 3 * quarterH;
   return [
     center,
-    rect(leftX, y, sideW, thirdH),                 // left-top  (W2)
-    rect(rightX, y, sideW, thirdH),                 // right-top (W3)
-    rect(leftX, y + thirdH, sideW, thirdH),                 // left-mid  (W4)
-    rect(rightX, y + thirdH, sideW, thirdH),                 // right-mid (W5)
-    rect(leftX, y + 2 * thirdH, sideW, h - 2 * thirdH),         // left-bot  (W6)
-    rect(rightX, y + 2 * thirdH, sideW, h - 2 * thirdH),         // right-bot (W7)
+    rect(leftX, y, sideW, quarterH),                                          // left-1  (W2)
+    rect(rightX, y, sideW, quarterH),                                         // right-1 (W3)
+    rect(leftX, y + quarterH, sideW, quarterH),                               // left-2  (W4)
+    rect(rightX, y + quarterH, sideW, quarterH),                              // right-2 (W5)
+    rect(leftX, y + 2 * quarterH, sideW, quarterH),                           // left-3  (W6)
+    rect(rightX, y + 2 * quarterH, sideW, quarterH),                          // right-3 (W7)
+    rect(leftX, y + 3 * quarterH, sideW, lastQuarterH),                       // left-4  (W8)
+    rect(rightX, y + 3 * quarterH, sideW, lastQuarterH),                      // right-4 (W9)
   ];
 }
 
