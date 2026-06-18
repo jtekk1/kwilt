@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  release:
+    name: Build and publish .kwinscript
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required for actions/create-release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq zip
+
+      - name: Verify tag matches metadata.json KPlugin.Version
+        run: |
+          set -euo pipefail
+          tag_version="${GITHUB_REF#refs/tags/v}"
+          json_version=$(jq -r '.KPlugin.Version' metadata.json)
+          if [ "$tag_version" != "$json_version" ]; then
+            echo "::error::Tag v${tag_version} does not match metadata.json KPlugin.Version (${json_version})."
+            echo "::error::Bump KPlugin.Version in a commit, then re-tag."
+            exit 1
+          fi
+
+      - name: Build .kwinscript artifact
+        run: ./scripts/package.sh
+
+      - name: Verify artifact
+        run: |
+          set -euo pipefail
+          json_version=$(jq -r '.KPlugin.Version' metadata.json)
+          artifact="build/ixtli-${json_version}.kwinscript"
+          if [ ! -f "$artifact" ]; then
+            echo "::error::Expected ${artifact} not produced by scripts/package.sh"
+            exit 1
+          fi
+          ls -la "$artifact"
+          unzip -l "$artifact"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/ixtli-*.kwinscript
+          # Any v0.x tag is a pre-release; v1.0.0+ is stable.
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
+          generate_release_notes: true
+          body: |
+            Ixtli ${{ github.ref_name }}
+
+            **Install**
+
+            ```sh
+            # Download ixtli-<VERSION>.kwinscript from the assets below, then:
+            kpackagetool6 -t KWin/Script -i ixtli-*.kwinscript
+            # Enable in System Settings → Window Management → KWin Scripts.
+            ```
+
+            After install, run `scripts/setup-shortcuts.sh` from the repo
+            once to seed app-launcher bindings and clear the conflicting
+            Plasma KWin defaults (Quick Tile on `Meta+arrows`, etc.).
+
+            See the [README](https://github.com/${{ github.repository }}/blob/main/README.md)
+            for the full Shortcuts table and Configuration keys.
