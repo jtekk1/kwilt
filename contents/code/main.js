@@ -532,7 +532,19 @@ function migrate(w) {
 // state matches its queue-side expectation.
 function onMinimizedChanged(w) {
   const found = findContaining(w);
-  if (!found) return;
+  if (!found) {
+    // Window isn't in any queue. If it just came back from a user-driven
+    // minimize (we untrack on external minimize — see the `if (w.minimized)`
+    // branch below), bring it back into the layout. Re-track puts it at the
+    // most-recent visible slot, mirroring the promote-on-activate behavior
+    // for knocked windows. Without this, un-minimizing a previously-tiled
+    // window left it floating instead of re-tiling.
+    if (!w.minimized && isTileable(w)) {
+      const key = track(w);
+      if (key) retileKey(key);
+    }
+    return;
+  }
   const split = Math.max(0, found.q.length - CAP);
   if (w.minimized) {
     // User minimized a visible tile (taskbar / title-bar button / app). Honor
