@@ -3,7 +3,8 @@ name: Release
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "v*.*.*"           # plain releases (e.g. v0.6.0, v1.0.0)
+      - "v*.*.*-*"          # semver pre-releases (e.g. v0.6.0-beta.1, v1.0.0-rc.2)
 
 jobs:
   release:
@@ -52,8 +53,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: build/ixtli-*.kwinscript
-          # Any v0.x tag is a pre-release; v1.0.0+ is stable.
-          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
+          # Pre-release if: v0.x (whole 0.x line is unstable) OR any tag
+          # carrying a semver pre-release suffix (v0.6.0-beta.1, v1.0.0-rc.2).
+          # Plain v1.0.0+ publishes as stable.
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') || contains(github.ref_name, '-') }}
           generate_release_notes: true
           body: |
             Ixtli ${{ github.ref_name }}
