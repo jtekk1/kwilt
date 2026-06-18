@@ -21,15 +21,15 @@
         </entry>
 
         <entry name="CapAutoGrid" type="Int">
-            <default>9</default>
+            <default>12</default>
             <min>1</min>
-            <max>9</max>
+            <max>12</max>
         </entry>
 
         <entry name="CapCenterTile" type="Int">
-            <default>7</default>
+            <default>9</default>
             <min>1</min>
-            <max>7</max>
+            <max>9</max>
         </entry>
 
         <entry name="CenterTileWidth1" type="Double">
