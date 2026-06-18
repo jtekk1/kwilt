@@ -38,10 +38,11 @@ function clamp(value, min, max) {
 // then reload the script (./dev-reload.sh or relogin). Defaults match the
 // hardcoded values that were here before this commit, so an unconfigured
 // kwinrc is a no-op.
+const VALID_LAYOUTS = ["autoGrid", "centerTile", "monocle", "dual"];
+
 const CFG = (function () {
   const layoutRaw = cfg("Layout", "centerTile");
-  const layout = (layoutRaw === "autoGrid" || layoutRaw === "centerTile")
-    ? layoutRaw : "centerTile";
+  const layout = VALID_LAYOUTS.indexOf(layoutRaw) !== -1 ? layoutRaw : "centerTile";
   return {
     layout: layout,
     capAutoGrid:        Math.round(clamp(cfg("CapAutoGrid", 12),        1, 12)),
@@ -53,8 +54,15 @@ const CFG = (function () {
 
 // LAYOUT and CAP are mutable so the cycle-layout shortcut can switch at
 // runtime. The initial value comes from CFG.layout (kwinrc-tunable).
+// monocle and dual are fixed-cap layouts — their cap defines the layout
+// (1 visible / 2 visible) and isn't configurable.
 let LAYOUT = CFG.layout;
-const CAPS = { autoGrid: CFG.capAutoGrid, centerTile: CFG.capCenterTile };
+const CAPS = {
+  autoGrid:   CFG.capAutoGrid,
+  centerTile: CFG.capCenterTile,
+  monocle:    1,
+  dual:       2,
+};
 let CAP = CAPS[LAYOUT];
 
 // App-launcher shortcuts are NOT registered here. KWin scripts can't spawn
@@ -408,9 +416,30 @@ function geometriesCenterTile(n, area) {
   ];
 }
 
+// Monocle — one visible window at full work area. CAP=1 knocks out the rest;
+// alt-tab onto a knocked window promotes it via the existing onActivated path.
+function geometriesMonocle(n, area) {
+  if (n <= 0) return [];
+  return [rect(area.x, area.y, area.width, area.height)];
+}
+
+// Dual — at most two visible windows. CAP=2. N=1 fills full area; N=2 is left
+// half / right half (the same shape as autoGrid's N=2 and centerTile's N=2).
+function geometriesDual(n, area) {
+  if (n <= 0) return [];
+  if (n === 1) return [rect(area.x, area.y, area.width, area.height)];
+  const hw = Math.floor(area.width / 2);
+  return [
+    rect(area.x, area.y, hw, area.height),
+    rect(area.x + hw, area.y, area.width - hw, area.height),
+  ];
+}
+
 const LAYOUTS = {
-  autoGrid: geometriesAutoGrid,
+  autoGrid:   geometriesAutoGrid,
   centerTile: geometriesCenterTile,
+  monocle:    geometriesMonocle,
+  dual:       geometriesDual,
 };
 
 function geometries(n, area) {

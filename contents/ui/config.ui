@@ -37,6 +37,8 @@
     <widget class="QComboBox" name="kcfg_Layout">
      <item><property name="text"><string>centerTile</string></property></item>
      <item><property name="text"><string>autoGrid</string></property></item>
+     <item><property name="text"><string>monocle</string></property></item>
+     <item><property name="text"><string>dual</string></property></item>
     </widget>
    </item>
 
