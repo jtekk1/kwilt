@@ -76,14 +76,24 @@ kwriteconfig6 --file kwinrc --group Script-ixtli --key CenterTileWidth1 0.9
 Out-of-range values are clamped to the listed range. Invalid `Layout` strings fall back to `centerTile`.
 - Geometry snaps. Visual transitions rely on KDE's built-in desktop effects (System Settings → Workspace Behavior → Desktop Effects).
 
-## Install (development)
+## Install
 
-One-time symlink so KWin sees the package:
+**As a user — packaged release.** Grab the latest `.kwinscript` from the [Releases tab](../../releases) and install it:
+
+```sh
+kpackagetool6 -t KWin/Script -i ixtli-*.kwinscript
+```
+
+Then enable in **System Settings → Window Management → KWin Scripts** and run `scripts/setup-shortcuts.sh` once to seed app-launcher bindings + clear conflicting Plasma defaults.
+
+**As a developer — repo symlink** for fast inner-loop iteration:
 
 ```sh
 mkdir -p "$HOME/.local/share/kwin/scripts"
 ln -s "$PWD" "$HOME/.local/share/kwin/scripts/ixtli"
 ```
+
+The repo symlink and the `kpackagetool6` install **conflict** at the same path — `scripts/install-local.sh` refuses to clobber the symlink. Pick one mode at a time.
 
 ## Dev loop
 
