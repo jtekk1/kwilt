@@ -78,11 +78,15 @@ Two equivalent paths — both read/write `~/.config/kwinrc` under `[Script-ixtli
 
 | Key | Type | Default | Range | Notes |
 |---|---|---|---|---|
-| `Layout` | string | `centerTile` | `centerTile` / `autoGrid` | Boot-time layout. `Meta+Ctrl+Shift+L` cycles at runtime. |
+| `Layout` | string | `centerTile` | `centerTile` / `autoGrid` / `monocle` / `dual` | Boot-time layout. `Meta+Ctrl+Shift+L` cycles at runtime. |
 | `CapAutoGrid` | int | `12` | `1`–`12` | Visible cap before knockout in autoGrid. |
 | `CapCenterTile` | int | `9` | `1`–`9` | Visible cap before knockout in centerTile. |
 | `CenterTileWidth1` | float | `0.85` | `0.5`–`1.0` | N=1 column width as fraction of work area in centerTile. |
 | `CenterTileSideWidth` | float | `0.30` | `0.15`–`0.45` | Each side column's width fraction at N=3+ in centerTile; center absorbs the rest. |
+| `OuterGap` | int | `0` | `0`–`80` | Pixels between any tile edge and the work area edge. `0` = flush to the screen. |
+| `InnerGap` | int | `0` | `0`–`80` | Pixels between adjacent tiles. Split halved on each side; odd values round consistently so adjacent gaps sum exactly. |
+| `BorderlessWhenTiled` | bool | `false` | `true` / `false` | Hide window decorations on visible tiles by setting `noBorder`. Original border state is saved per-window and restored on untrack/close/fullscreen. |
+| `AlwaysFloat` | string | `""` | comma-separated | Substrings matched (case-insensitive) against each window's `resourceClass` and `resourceName`. Matches are never tiled (e.g. `kcalc, pavucontrol, plasma-systemmonitor`). |
 
 Set via:
 
@@ -138,7 +142,6 @@ Look for `[ixtli]` lines. The KWin Scripting Console (`Alt+F2` → `wm console`)
 ## Known gaps
 
 - User maximizing/fullscreening a tiled window doesn't auto-untile.
-- No config file — boot-time `LAYOUT` and per-layout caps are constants in `main.js`. Set the boot default via `./dev-reload.sh grid|center`; cycle at runtime with the shortcut below.
 - Windows on all desktops (or pinned to multiple desktops) stay floating.
 - Knocked-out pile has no tab UI yet.
 

@@ -43,12 +43,21 @@ const VALID_LAYOUTS = ["autoGrid", "centerTile", "monocle", "dual"];
 const CFG = (function () {
   const layoutRaw = cfg("Layout", "centerTile");
   const layout = VALID_LAYOUTS.indexOf(layoutRaw) !== -1 ? layoutRaw : "centerTile";
+  const alwaysFloatRaw = cfg("AlwaysFloat", "");
+  const alwaysFloat = String(alwaysFloatRaw)
+    .split(",")
+    .map(function (s) { return s.trim().toLowerCase(); })
+    .filter(function (s) { return s.length > 0; });
   return {
     layout: layout,
     capAutoGrid:        Math.round(clamp(cfg("CapAutoGrid", 12),        1, 12)),
     capCenterTile:      Math.round(clamp(cfg("CapCenterTile", 9),       1, 9)),
     centerTileWidth1:               clamp(cfg("CenterTileWidth1", 0.85), 0.5, 1.0),
     centerTileSideWidth:            clamp(cfg("CenterTileSideWidth", 0.30), 0.15, 0.45),
+    outerGap:           Math.round(clamp(cfg("OuterGap", 0),  0, 80)),
+    innerGap:           Math.round(clamp(cfg("InnerGap", 0),  0, 80)),
+    borderlessWhenTiled:                cfg("BorderlessWhenTiled", false),
+    alwaysFloat:        alwaysFloat,
   };
 })();
 
@@ -107,6 +116,16 @@ function isTileable(w) {
   // windows we should be tiling. We require BOTH because some legit
   // apps set just one (e.g., a few terminals skip the switcher).
   if (w.skipTaskbar && w.skipSwitcher) return false;
+  // User-configured float-list. Substring match against resourceClass
+  // OR resourceName (both lowercased) — case-insensitive, partial OK so
+  // "kcalc" matches "kcalc.kcalc" etc. Empty list short-circuits.
+  if (CFG.alwaysFloat.length > 0) {
+    const rc = (w.resourceClass || "").toLowerCase();
+    const rn = (w.resourceName || "").toLowerCase();
+    for (const pat of CFG.alwaysFloat) {
+      if (rc.indexOf(pat) !== -1 || rn.indexOf(pat) !== -1) return false;
+    }
+  }
   return true;
 }
 
@@ -446,6 +465,62 @@ function geometries(n, area) {
   return LAYOUTS[LAYOUT](n, area);
 }
 
+// Apply user-configured gaps as a post-processing pass on layout rects.
+// Edges that touch the work area's edge shrink by OuterGap; interior edges
+// (between tiles) shrink by half of InnerGap on each side, so adjacent
+// tiles' combined retreat equals InnerGap. Floor/ceil split keeps the math
+// integer-clean when InnerGap is odd. With both gaps at 0 (the default)
+// this is a no-op and the layout's raw rects are returned unchanged.
+function applyGaps(rects, area) {
+  if (CFG.outerGap === 0 && CFG.innerGap === 0) return rects;
+  const og = CFG.outerGap;
+  const igLo = Math.floor(CFG.innerGap / 2);
+  const igHi = CFG.innerGap - igLo;
+  const ax2 = area.x + area.width;
+  const ay2 = area.y + area.height;
+  return rects.map(function (r) {
+    const left   = r.x === area.x          ? og : igLo;
+    const top    = r.y === area.y          ? og : igLo;
+    const right  = (r.x + r.width)  === ax2 ? og : igHi;
+    const bottom = (r.y + r.height) === ay2 ? og : igHi;
+    return {
+      x: r.x + left,
+      y: r.y + top,
+      width:  Math.max(1, r.width  - left - right),
+      height: Math.max(1, r.height - top  - bottom),
+    };
+  });
+}
+
+// tilesFor is the single source of truth for the final, gap-adjusted tile
+// rects used by applyQueue (geometry assignment), handleDrop (drop hit-test),
+// and tileSlotOf (focus/swap neighbor search). Layout functions stay pure.
+function tilesFor(n, area) {
+  return applyGaps(geometries(n, area), area);
+}
+
+// Border-toggle helpers. Save the window's original `noBorder` on first
+// force so we can put it back exactly the way we found it; restore is a
+// no-op if we never forced. `_ixtliBorderForced` is a Qt dynamic property
+// — same persistence-across-reload caveat as `_ixtliBound`, which is why
+// init's loop resets both before re-binding signals.
+function forceNoBorder(w) {
+  if (!CFG.borderlessWhenTiled) return;
+  if (typeof w.noBorder === "undefined") return;
+  if (w._ixtliBorderForced) return;
+  w._ixtliOrigNoBorder = w.noBorder;
+  w.noBorder = true;
+  w._ixtliBorderForced = true;
+}
+
+function restoreBorder(w) {
+  if (!w || !w._ixtliBorderForced) return;
+  if (typeof w.noBorder !== "undefined") {
+    w.noBorder = w._ixtliOrigNoBorder;
+  }
+  w._ixtliBorderForced = false;
+}
+
 function queueFor(out, desk, create) {
   const key = keyFor(out, desk);
   let q = queues.get(key);
@@ -477,7 +552,7 @@ function applyQueue(key, q, out, desk) {
   const split = Math.max(0, q.length - CAP);
   const knocked = q.slice(0, split);
   const visible = q.slice(split);
-  const geos = geometries(visible.length, workArea(out, desk));
+  const geos = tilesFor(visible.length, workArea(out, desk));
   for (const w of knocked) {
     if (!w.minimized) w.minimized = true;
   }
@@ -485,6 +560,7 @@ function applyQueue(key, q, out, desk) {
     if (w.minimized) w.minimized = false;
     // Unmaximize before setting geometry, else maximize state overrides us.
     if (w.maximizable) w.setMaximize(false, false);
+    forceNoBorder(w);
     w.frameGeometry = geos[i];
   });
   log("apply " + key + " n=" + q.length + " visible=" + visible.length + " knocked=" + knocked.length);
@@ -516,6 +592,7 @@ function untrack(w) {
   const found = findContaining(w);
   if (!found) return null;
   found.q.splice(found.idx, 1);
+  restoreBorder(w);
   return found.key;
 }
 
@@ -631,7 +708,7 @@ function handleDrop(w) {
   if (!desk || !w.output) { retileKey(found.key); return; }
 
   const area = workArea(w.output, desk);
-  const tiles = geometries(visible.length, area);
+  const tiles = tilesFor(visible.length, area);
 
   const fg = w.frameGeometry;
   const cx = fg.x + fg.width / 2;
@@ -723,7 +800,7 @@ function tileSlotOf(w) {
   const desk = singleDesktop(w);
   if (!desk || !w.output) return null;
   const visibleCount = found.q.length - split;
-  const tiles = geometries(visibleCount, workArea(w.output, desk));
+  const tiles = tilesFor(visibleCount, workArea(w.output, desk));
   const visIdx = found.idx - split;
   return { found: found, split: split, visIdx: visIdx, tiles: tiles };
 }
@@ -811,6 +888,16 @@ function rebuildQueues() {
   for (const w of existing) {
     // Stale Qt dynamic property from a prior script-load — clear so
     // bindWindow actually re-connects signals against the new JS engine.
+    // Same goes for the border-force flag: if the prior engine forced
+    // noBorder, the window still wears the forced state but we've lost
+    // the JS-side bookkeeping. Restore the saved original before re-
+    // forcing on the new track() pass, so toggling BorderlessWhenTiled
+    // off mid-reload doesn't strand the window borderless.
+    if (w._ixtliBorderForced && typeof w.noBorder !== "undefined" &&
+        typeof w._ixtliOrigNoBorder !== "undefined") {
+      w.noBorder = w._ixtliOrigNoBorder;
+    }
+    w._ixtliBorderForced = false;
     w._ixtliBound = false;
     const key = track(w);
     if (key) bindWindow(w);

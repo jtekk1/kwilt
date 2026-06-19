@@ -19,8 +19,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>420</width>
-    <height>240</height>
+    <width>460</width>
+    <height>380</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -94,7 +94,56 @@
     </widget>
    </item>
 
-   <item row="5" column="0" colspan="2">
+   <item row="5" column="0">
+    <widget class="QLabel" name="outerGapLabel">
+     <property name="text"><string>Outer gap (px):</string></property>
+    </widget>
+   </item>
+   <item row="5" column="1">
+    <widget class="QSpinBox" name="kcfg_OuterGap">
+     <property name="minimum"><number>0</number></property>
+     <property name="maximum"><number>80</number></property>
+     <property name="suffix"><string> px</string></property>
+    </widget>
+   </item>
+
+   <item row="6" column="0">
+    <widget class="QLabel" name="innerGapLabel">
+     <property name="text"><string>Inner gap (px):</string></property>
+    </widget>
+   </item>
+   <item row="6" column="1">
+    <widget class="QSpinBox" name="kcfg_InnerGap">
+     <property name="minimum"><number>0</number></property>
+     <property name="maximum"><number>80</number></property>
+     <property name="suffix"><string> px</string></property>
+    </widget>
+   </item>
+
+   <item row="7" column="0">
+    <widget class="QLabel" name="borderlessLabel">
+     <property name="text"><string>Hide decorations when tiled:</string></property>
+    </widget>
+   </item>
+   <item row="7" column="1">
+    <widget class="QCheckBox" name="kcfg_BorderlessWhenTiled">
+     <property name="text"><string/></property>
+    </widget>
+   </item>
+
+   <item row="8" column="0">
+    <widget class="QLabel" name="alwaysFloatLabel">
+     <property name="text"><string>Always float (resourceClass, comma-separated):</string></property>
+     <property name="wordWrap"><bool>true</bool></property>
+    </widget>
+   </item>
+   <item row="8" column="1">
+    <widget class="QLineEdit" name="kcfg_AlwaysFloat">
+     <property name="placeholderText"><string>kcalc, pavucontrol, plasma-systemmonitor</string></property>
+    </widget>
+   </item>
+
+   <item row="9" column="0" colspan="2">
     <widget class="QLabel" name="noteLabel">
      <property name="text">
       <string>Changes apply on the next script reload (toggle Ixtli off and on, or relogin).</string>
