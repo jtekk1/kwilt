@@ -5,7 +5,7 @@
         "Name": "Ixtli",
         "Description": "Per-output, per-desktop window tiling with auto-grid and center-tile layouts.",
         "Icon": "preferences-system-windows-script-test",
-        "Version": "0.6.0-beta.1",
+        "Version": "0.7.0",
         "License": "GPL-3.0-or-later",
         "EnabledByDefault": false,
         "Authors": [
