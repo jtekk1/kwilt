@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# Stop and unload the Ixtli KWin script.
+# Stop and unload the Kwilt KWin script.
 # unloadScript handles stop + teardown in one call.
 
 set -euo pipefail
 
-SCRIPT_NAME="ixtli"
+SCRIPT_NAME="kwilt"
 
 result=$(busctl --user call org.kde.KWin /Scripting \
     org.kde.kwin.Scripting unloadScript s "$SCRIPT_NAME")
 
 case "$result" in
     "b true")
-        echo "ixtli stopped and unloaded."
+        echo "kwilt stopped and unloaded."
         ;;
     "b false")
-        echo "ixtli was not loaded — nothing to do."
+        echo "kwilt was not loaded — nothing to do."
         ;;
     *)
         echo "unexpected response from unloadScript: $result" >&2

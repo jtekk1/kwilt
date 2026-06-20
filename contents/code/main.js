@@ -1,13 +1,13 @@
 "use strict";
 
-// Ixtli — Phase 0 auto-grid tiler.
+// Kwilt — Phase 0 auto-grid tiler.
 //
 // Per (output, virtual desktop) we maintain an ordered queue of tracked
 // windows. The last CAP entries are visible and tiled; the rest are
 // "knocked out" (minimized). Eviction is FIFO; activating a knocked-out
 // window promotes it to the end of the queue.
 
-const LOG_PREFIX = "[ixtli]";
+const LOG_PREFIX = "[kwilt]";
 
 function log(msg) { print(LOG_PREFIX, msg); }
 
@@ -34,7 +34,7 @@ function clamp(value, min, max) {
 }
 
 // Tunables. Override with:
-//   kwriteconfig6 --file kwinrc --group Script-ixtli --key <Key> <value>
+//   kwriteconfig6 --file kwinrc --group Script-kwilt --key <Key> <value>
 // then reload the script (./dev-reload.sh or relogin). Defaults match the
 // hardcoded values that were here before this commit, so an unconfigured
 // kwinrc is a no-op.
@@ -501,24 +501,24 @@ function tilesFor(n, area) {
 
 // Border-toggle helpers. Save the window's original `noBorder` on first
 // force so we can put it back exactly the way we found it; restore is a
-// no-op if we never forced. `_ixtliBorderForced` is a Qt dynamic property
-// — same persistence-across-reload caveat as `_ixtliBound`, which is why
+// no-op if we never forced. `_kwiltBorderForced` is a Qt dynamic property
+// — same persistence-across-reload caveat as `_kwiltBound`, which is why
 // init's loop resets both before re-binding signals.
 function forceNoBorder(w) {
   if (!CFG.borderlessWhenTiled) return;
   if (typeof w.noBorder === "undefined") return;
-  if (w._ixtliBorderForced) return;
-  w._ixtliOrigNoBorder = w.noBorder;
+  if (w._kwiltBorderForced) return;
+  w._kwiltOrigNoBorder = w.noBorder;
   w.noBorder = true;
-  w._ixtliBorderForced = true;
+  w._kwiltBorderForced = true;
 }
 
 function restoreBorder(w) {
-  if (!w || !w._ixtliBorderForced) return;
+  if (!w || !w._kwiltBorderForced) return;
   if (typeof w.noBorder !== "undefined") {
-    w.noBorder = w._ixtliOrigNoBorder;
+    w.noBorder = w._kwiltOrigNoBorder;
   }
-  w._ixtliBorderForced = false;
+  w._kwiltBorderForced = false;
 }
 
 function queueFor(out, desk, create) {
@@ -664,8 +664,8 @@ function onWindowClosed(w) {
 }
 
 function bindWindow(w) {
-  if (w._ixtliBound) return;
-  w._ixtliBound = true;
+  if (w._kwiltBound) return;
+  w._kwiltBound = true;
   if (w.outputChanged) w.outputChanged.connect(function () { migrate(w); });
   if (w.desktopsChanged) w.desktopsChanged.connect(function () { migrate(w); });
   if (w.minimizedChanged) w.minimizedChanged.connect(function () { onMinimizedChanged(w); });
@@ -673,13 +673,13 @@ function bindWindow(w) {
   if (w.closed) w.closed.connect(function () { onWindowClosed(w); });
   if (w.interactiveMoveResizeStarted) {
     w.interactiveMoveResizeStarted.connect(function () {
-      w._ixtliDragMode = w.move ? "move" : (w.resize ? "resize" : null);
+      w._kwiltDragMode = w.move ? "move" : (w.resize ? "resize" : null);
     });
   }
   if (w.interactiveMoveResizeFinished) {
     w.interactiveMoveResizeFinished.connect(function () {
-      const mode = w._ixtliDragMode;
-      w._ixtliDragMode = null;
+      const mode = w._kwiltDragMode;
+      w._kwiltDragMode = null;
       if (mode === "move") {
         handleDrop(w);
       } else if (mode === "resize") {
@@ -893,12 +893,12 @@ function rebuildQueues() {
     // the JS-side bookkeeping. Restore the saved original before re-
     // forcing on the new track() pass, so toggling BorderlessWhenTiled
     // off mid-reload doesn't strand the window borderless.
-    if (w._ixtliBorderForced && typeof w.noBorder !== "undefined" &&
-        typeof w._ixtliOrigNoBorder !== "undefined") {
-      w.noBorder = w._ixtliOrigNoBorder;
+    if (w._kwiltBorderForced && typeof w.noBorder !== "undefined" &&
+        typeof w._kwiltOrigNoBorder !== "undefined") {
+      w.noBorder = w._kwiltOrigNoBorder;
     }
-    w._ixtliBorderForced = false;
-    w._ixtliBound = false;
+    w._kwiltBorderForced = false;
+    w._kwiltBound = false;
     const key = track(w);
     if (key) bindWindow(w);
   }
@@ -910,14 +910,14 @@ function init() {
   log("loaded; layout=" + LAYOUT + " cap=" + CAP);
   const existing = workspace.windowList ? workspace.windowList() : (workspace.clientList ? workspace.clientList() : []);
   for (const w of existing) {
-    // _ixtliBound is a Qt dynamic property that persists across script
+    // _kwiltBound is a Qt dynamic property that persists across script
     // reloads (the QObject lives in KWin), but the signal connections
     // bindWindow set up under the previous JS engine were torn down when
     // it was destroyed. Resetting here ensures we re-connect against the
     // current engine — otherwise bindWindow short-circuits and our
     // minimizedChanged / fullScreenChanged / closed listeners never fire
     // for windows that were open before the reload.
-    w._ixtliBound = false;
+    w._kwiltBound = false;
     const key = track(w);
     if (key) bindWindow(w);
   }
@@ -942,33 +942,33 @@ function init() {
   }
 
   // Layout — cycle and direct-set.
-  registerShortcut("IxtliCycleLayout",  "Ixtli: Cycle window layout",       "Meta+Ctrl+Shift+L", cycleLayout);
-  registerShortcut("IxtliLayoutGrid",    "Ixtli: Layout — autoGrid",        "Meta+Ctrl+G",       function () { setLayout("autoGrid"); });
-  registerShortcut("IxtliLayoutCenter",  "Ixtli: Layout — centerTile",      "Meta+Ctrl+C",       function () { setLayout("centerTile"); });
-  registerShortcut("IxtliLayoutMonocle", "Ixtli: Layout — monocle",         "Meta+Ctrl+M",       function () { setLayout("monocle"); });
-  registerShortcut("IxtliLayoutDual",    "Ixtli: Layout — dual",            "Meta+Ctrl+D",       function () { setLayout("dual"); });
+  registerShortcut("KwiltCycleLayout",  "Kwilt: Cycle window layout",       "Meta+Ctrl+Shift+L", cycleLayout);
+  registerShortcut("KwiltLayoutGrid",    "Kwilt: Layout — autoGrid",        "Meta+Ctrl+G",       function () { setLayout("autoGrid"); });
+  registerShortcut("KwiltLayoutCenter",  "Kwilt: Layout — centerTile",      "Meta+Ctrl+C",       function () { setLayout("centerTile"); });
+  registerShortcut("KwiltLayoutMonocle", "Kwilt: Layout — monocle",         "Meta+Ctrl+M",       function () { setLayout("monocle"); });
+  registerShortcut("KwiltLayoutDual",    "Kwilt: Layout — dual",            "Meta+Ctrl+D",       function () { setLayout("dual"); });
 
   // Manual recovery: re-snapshot the queues from workspace.windowList().
   // Use when you suspect a ghost tile slot — quicker than ./dev-reload.sh.
-  registerShortcut("IxtliRebuildQueues", "Ixtli: Rebuild tile queues (ghost-slot recovery)", "Meta+Ctrl+Shift+R", rebuildQueues);
+  registerShortcut("KwiltRebuildQueues", "Kwilt: Rebuild tile queues (ghost-slot recovery)", "Meta+Ctrl+Shift+R", rebuildQueues);
 
   // Focus by direction (Meta+arrows) and swap by direction (Meta+Shift+arrows).
   // Plasma's KWin defaults (Quick Tile / Move Window to Screen) claim these
   // key combos and win the dispatch. scripts/setup-shortcuts.sh disables
   // them in kglobalshortcutsrc; run it once per machine.
-  registerShortcut("IxtliFocusLeft",  "Ixtli: Focus window left",  "Meta+Left",  function () { focusByDirection("left");  });
-  registerShortcut("IxtliFocusRight", "Ixtli: Focus window right", "Meta+Right", function () { focusByDirection("right"); });
-  registerShortcut("IxtliFocusUp",    "Ixtli: Focus window up",    "Meta+Up",    function () { focusByDirection("up");    });
-  registerShortcut("IxtliFocusDown",  "Ixtli: Focus window down",  "Meta+Down",  function () { focusByDirection("down");  });
-  registerShortcut("IxtliSwapLeft",   "Ixtli: Swap window left",   "Meta+Shift+Left",  function () { swapByDirection("left");  });
-  registerShortcut("IxtliSwapRight",  "Ixtli: Swap window right",  "Meta+Shift+Right", function () { swapByDirection("right"); });
-  registerShortcut("IxtliSwapUp",     "Ixtli: Swap window up",     "Meta+Shift+Up",    function () { swapByDirection("up");    });
-  registerShortcut("IxtliSwapDown",   "Ixtli: Swap window down",   "Meta+Shift+Down",  function () { swapByDirection("down");  });
+  registerShortcut("KwiltFocusLeft",  "Kwilt: Focus window left",  "Meta+Left",  function () { focusByDirection("left");  });
+  registerShortcut("KwiltFocusRight", "Kwilt: Focus window right", "Meta+Right", function () { focusByDirection("right"); });
+  registerShortcut("KwiltFocusUp",    "Kwilt: Focus window up",    "Meta+Up",    function () { focusByDirection("up");    });
+  registerShortcut("KwiltFocusDown",  "Kwilt: Focus window down",  "Meta+Down",  function () { focusByDirection("down");  });
+  registerShortcut("KwiltSwapLeft",   "Kwilt: Swap window left",   "Meta+Shift+Left",  function () { swapByDirection("left");  });
+  registerShortcut("KwiltSwapRight",  "Kwilt: Swap window right",  "Meta+Shift+Right", function () { swapByDirection("right"); });
+  registerShortcut("KwiltSwapUp",     "Kwilt: Swap window up",     "Meta+Shift+Up",    function () { swapByDirection("up");    });
+  registerShortcut("KwiltSwapDown",   "Kwilt: Swap window down",   "Meta+Shift+Down",  function () { swapByDirection("down");  });
 
   // Focus history. Meta+Tab is claimed by KWin's Walk Through Windows
   // (alongside Alt+Tab) — setup-shortcuts.sh strips just the Meta+Tab half.
-  registerShortcut("IxtliCycleFocus", "Ixtli: Cycle focus (next tile)", "Meta+Tab", cycleFocus);
-  registerShortcut("IxtliFocusLast",  "Ixtli: Focus last window",       "Meta+U",   focusLast);
+  registerShortcut("KwiltCycleFocus", "Kwilt: Cycle focus (next tile)", "Meta+Tab", cycleFocus);
+  registerShortcut("KwiltFocusLast",  "Kwilt: Focus last window",       "Meta+U",   focusLast);
 }
 
 init();

@@ -1,11 +1,11 @@
 {
     "KPackageStructure": "KWin/Script",
     "KPlugin": {
-        "Id": "ixtli",
-        "Name": "Ixtli",
+        "Id": "kwilt",
+        "Name": "Kwilt",
         "Description": "Per-output, per-desktop window tiling with auto-grid and center-tile layouts.",
         "Icon": "preferences-system-windows-script-test",
-        "Version": "0.7.0-beta.2",
+        "Version": "0.7.1-beta.3",
         "License": "GPL-3.0-or-later",
         "EnabledByDefault": false,
         "Authors": [

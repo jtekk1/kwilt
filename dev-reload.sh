@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Dev reload for the Ixtli KWin script.
+# Dev reload for the Kwilt KWin script.
 #
 # Usage:
 #   ./dev-reload.sh           # reload with current LAYOUT
@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-SCRIPT_NAME="ixtli"
+SCRIPT_NAME="kwilt"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAIN_JS="${SCRIPT_DIR}/contents/code/main.js"
 INSTALLED_PATH="$HOME/.local/share/kwin/scripts/${SCRIPT_NAME}/contents/code/main.js"
@@ -64,7 +64,7 @@ fi
 busctl --user call org.kde.KWin "/Scripting/Script${sid}" \
     org.kde.kwin.Script run
 
-echo "ixtli loaded as Script${sid} (layout: ${current_layout}) and started."
+echo "kwilt loaded as Script${sid} (layout: ${current_layout}) and started."
 echo
 echo "Tail logs in another terminal:"
 echo "  journalctl -f QT_CATEGORY=js QT_CATEGORY=kwin_scripting"

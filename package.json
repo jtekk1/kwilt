@@ -1,8 +1,8 @@
 {
-  "name": "ixtli",
-  "version": "0.7.0-beta.2",
+  "name": "kwilt",
+  "version": "0.7.1-beta.3",
   "private": true,
-  "description": "Tooling for the Ixtli KWin tiling script. The script itself is contents/code/main.js and runs inside KWin, not Node.",
+  "description": "Tooling for the Kwilt KWin tiling script. The script itself is contents/code/main.js and runs inside KWin, not Node.",
   "scripts": {
     "lint": "eslint contents/code/main.js",
     "check:json": "node -e \"JSON.parse(require('fs').readFileSync('metadata.json','utf8'))\"",

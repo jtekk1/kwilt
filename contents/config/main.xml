@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  kcfg schema for Ixtli's tunables. KCM uses this to type-check the widget
+  kcfg schema for Kwilt's tunables. KCM uses this to type-check the widget
   bindings in contents/ui/config.ui (via the `kcfg_<KeyName>` widget-name
   convention) and to enforce per-entry min/max.
 
   Plasma 6 KWin scripts leave `<kcfgfile name=""/>` and `<group name=""/>`
   empty by convention — kcm_kwin4_genericscripted fills both in at runtime
-  from the script's KPlugin.Id ("ixtli"), routing storage to kwinrc's
-  [Script-ixtli] group. main.js reads from the same group via cfg().
+  from the script's KPlugin.Id ("kwilt"), routing storage to kwinrc's
+  [Script-kwilt] group. main.js reads from the same group via cfg().
 -->
 <kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"

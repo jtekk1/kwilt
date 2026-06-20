@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Ixtli — System Settings → Window Management → KWin Scripts → Configure.
+  Kwilt — System Settings → Window Management → KWin Scripts → Configure.
 
   Plasma 6 KWin scripts use Qt Designer XML (.ui) for their config form, NOT
   QML, despite the rest of Plasma being QtQuick-first. KCM bridges the .ui
@@ -13,8 +13,8 @@
     "X-KDE-ConfigModule": "kwin/effects/configs/kcm_kwin4_genericscripted"
 -->
 <ui version="4.0">
- <class>KWin::IxtliConfigForm</class>
- <widget class="QWidget" name="KWin::IxtliConfigForm">
+ <class>KWin::KwiltConfigForm</class>
+ <widget class="QWidget" name="KWin::KwiltConfigForm">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -24,7 +24,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Ixtli</string>
+   <string>Kwilt</string>
   </property>
   <layout class="QFormLayout" name="formLayout">
 
@@ -146,7 +146,7 @@
    <item row="9" column="0" colspan="2">
     <widget class="QLabel" name="noteLabel">
      <property name="text">
-      <string>Changes apply on the next script reload (toggle Ixtli off and on, or relogin).</string>
+      <string>Changes apply on the next script reload (toggle Kwilt off and on, or relogin).</string>
      </property>
      <property name="wordWrap"><bool>true</bool></property>
      <property name="styleSheet"><string>color: palette(placeholder-text); font-style: italic;</string></property>
