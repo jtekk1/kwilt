@@ -655,6 +655,33 @@ function onFullScreenChanged(w) {
   }
 }
 
+// Symmetric to onFullScreenChanged. KWin::MaximizeMode: 0 = Restore (none),
+// 1 = Vertical, 2 = Horizontal, 3 = Full — anything non-zero means the user
+// asked for some kind of maximize, so we drop it from the queue and let it
+// float at whatever maximized geometry KWin chose. When the user un-maximizes
+// (mode → 0), we re-track and pull it back into the layout.
+//
+// applyQueue's own `setMaximize(false, false)` calls also fire this signal,
+// but the window is already in its queue at that point, so the re-track
+// branch short-circuits on `!found` and the untrack branch sees Restore mode
+// — both are no-ops. No recursion.
+function onMaximizedChanged(w) {
+  const mode = typeof w.requestedMaximizeMode !== "undefined" ? w.requestedMaximizeMode
+             : typeof w.maximizeMode          !== "undefined" ? w.maximizeMode
+             : 0;
+  const isMax = mode !== 0;
+  const found = findContaining(w);
+  if (isMax) {
+    if (found) {
+      untrack(w);
+      retileKey(found.key);
+    }
+  } else if (!found && isTileable(w)) {
+    const newKey = track(w);
+    if (newKey) retileKey(newKey);
+  }
+}
+
 // Some windows die without windowRemoved firing reliably (apps that exit
 // abruptly, transient surfaces, etc.). Listening to per-window `closed`
 // catches those cases and prevents stale refs from squatting on tile slots.
@@ -670,6 +697,7 @@ function bindWindow(w) {
   if (w.desktopsChanged) w.desktopsChanged.connect(function () { migrate(w); });
   if (w.minimizedChanged) w.minimizedChanged.connect(function () { onMinimizedChanged(w); });
   if (w.fullScreenChanged) w.fullScreenChanged.connect(function () { onFullScreenChanged(w); });
+  if (w.maximizedChanged) w.maximizedChanged.connect(function () { onMaximizedChanged(w); });
   if (w.closed) w.closed.connect(function () { onWindowClosed(w); });
   if (w.interactiveMoveResizeStarted) {
     w.interactiveMoveResizeStarted.connect(function () {
