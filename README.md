@@ -171,9 +171,8 @@ A logout + login picks up the new bindings cleanly.
 
 ## Known gaps
 
-- User maximizing/fullscreening a tiled window doesn't auto-untile.
 - Windows on all desktops (or pinned to multiple desktops) stay floating.
-- Knocked-out pile has no tab UI yet.
+- Knocked-out pile has no tab UI yet (needs a companion Plasma/Quickshell widget — KWin scripts can't render arbitrary UI).
 
 ## Shortcuts
 
