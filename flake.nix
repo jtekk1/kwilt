@@ -1,5 +1,5 @@
 {
-  description = "Ixtli — dev shell for the KWin tiling script.";
+  description = "Kwilt — dev shell for the KWin tiling script.";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -12,7 +12,7 @@
         pkgs = nixpkgs.legacyPackages.${system};
       in {
         devShells.default = pkgs.mkShell {
-          name = "ixtli-dev";
+          name = "kwilt-dev";
 
           # Matches the toolchain used by .githooks/* and .github/workflows/check.yml.
           packages = with pkgs; [
@@ -22,7 +22,7 @@
           ];
 
           shellHook = ''
-            echo "ixtli dev shell — shellcheck $(shellcheck --version | awk '/^version:/{print $2}'), node $(node --version), jq $(jq --version)"
+            echo "kwilt dev shell — shellcheck $(shellcheck --version | awk '/^version:/{print $2}'), node $(node --version), jq $(jq --version)"
           '';
         };
       });

@@ -1,21 +1,26 @@
 #!/usr/bin/env bash
-# Idempotent KDE-side setup for Ixtli's keybindings.
+# Idempotent KDE-side setup for Kwilt's keybindings.
 #
-# Does three things:
+# Does four things:
 #
-#   1. Disables Plasma KWin defaults that collide with Ixtli's window-
+#   1. Disables Plasma KWin defaults that collide with Kwilt's window-
 #      management shortcuts (Quick Tile on Meta+arrows, Move Window to
 #      Screen on Meta+Shift+Left/Right, Walk Through Windows' Meta+Tab
 #      half). The Plasma defaults are preserved as the "default" half of
 #      each entry so you can revert via System Settings → Shortcuts.
 #
 #   2. Cleans up stale Ixtli launcher entries left in [kwin] by an
-#      earlier main.js. KWin scripts can't reliably spawn processes
-#      (callDBus → systemd-run can't marshal StartTransientUnit's
-#      ExecStart variant), so launcher bindings moved to KDE's native
-#      Custom Shortcuts mechanism — handled in step 3.
+#      earlier main.js (pre-rename, pre-setup-shortcuts). KWin scripts
+#      can't reliably spawn processes (callDBus → systemd-run can't
+#      marshal StartTransientUnit's ExecStart variant), so launcher
+#      bindings moved to KDE's native Custom Shortcuts mechanism —
+#      handled in step 4.
 #
-#   3. Installs 20 hidden .desktop files under ~/.local/share/applications/
+#   3. Removes pre-rename Ixtli desktop files + kglobalshortcutsrc groups
+#      (ixtli-spawn-*.desktop) so they don't double-bind alongside the
+#      new Kwilt-prefixed entries from step 4.
+#
+#   4. Installs 20 hidden .desktop files under ~/.local/share/applications/
 #      and binds each to a key via kglobalshortcutsrc. This is the same
 #      mechanism System Settings → Shortcuts → Custom Shortcuts uses for
 #      "Application" shortcuts. Plasma's launcher menu doesn't show them
@@ -49,7 +54,7 @@ kgs --group kwin --key "Window to Next Screen"     "none,Meta+Shift+Right,Move W
 
 # Walk Through Windows holds two keys joined by a real tab character:
 # "Alt+Tab<TAB>Meta+Tab". Preserve Alt+Tab (you almost certainly want it)
-# and strip just Meta+Tab so Ixtli's IxtliCycleFocus can claim it. We pass
+# and strip just Meta+Tab so Kwilt's KwiltCycleFocus can claim it. We pass
 # the tab via $'\t' so it's a real 0x09 byte; kwriteconfig6 round-trips it
 # through KConfig's escaping, which writes it back as a literal "\t" in
 # the file — matching the format Plasma originally wrote.
@@ -71,7 +76,25 @@ for key in "${stale_keys[@]}"; do
     kgs --group kwin --key "$key" --delete '' 2>/dev/null || true
 done
 
-# --- 3. App launcher .desktop files + kglobalshortcutsrc bindings ---
+# --- 3. Remove pre-rename Ixtli .desktop files + their shortcut groups ---
+#
+# v0.7.0-beta.2 and earlier installed launchers as
+# ~/.local/share/applications/ixtli-spawn-*.desktop with kglobalshortcutsrc
+# groups [ixtli-spawn-*.desktop]. After the v0.7.1-beta.3 rename to Kwilt,
+# step 4 installs kwilt-spawn-*.desktop instead. Sweep the old files and
+# their shortcut groups so they don't double-bind keys.
+
+old_desktop_dir="${HOME}/.local/share/applications"
+shopt -s nullglob
+for old_file in "${old_desktop_dir}"/ixtli-spawn-*.desktop; do
+    old_id="$(basename "$old_file")"
+    kgs --group "$old_id" --key "_k_friendly_name" --delete '' 2>/dev/null || true
+    kgs --group "$old_id" --key "_launch" --delete '' 2>/dev/null || true
+    rm -f "$old_file"
+done
+shopt -u nullglob
+
+# --- 4. App launcher .desktop files + kglobalshortcutsrc bindings ---
 
 desktop_dir="${HOME}/.local/share/applications"
 mkdir -p "$desktop_dir"
@@ -81,20 +104,20 @@ install_launcher() {
     local name="$2"
     local keys="$3"
     local exec="$4"
-    local file="${desktop_dir}/ixtli-spawn-${slug}.desktop"
+    local file="${desktop_dir}/kwilt-spawn-${slug}.desktop"
 
     cat > "$file" <<DESKTOP
 [Desktop Entry]
 Type=Application
-Name=Ixtli: ${name}
+Name=Kwilt: ${name}
 Exec=${exec}
 NoDisplay=true
 Categories=Utility;
 X-KDE-StartupNotify=false
 DESKTOP
 
-    local id="ixtli-spawn-${slug}.desktop"
-    kgs --group "$id" --key "_k_friendly_name" "Ixtli: ${name}"
+    local id="kwilt-spawn-${slug}.desktop"
+    kgs --group "$id" --key "_k_friendly_name" "Kwilt: ${name}"
     kgs --group "$id" --key "_launch" "${keys},none,Launch"
 }
 
@@ -124,15 +147,16 @@ install_launcher "upwork"    "Upwork webapp"          "Meta+Alt+U"         "heli
 install_launcher "youtube"   "YouTube webapp"         "Meta+Alt+Y"         "helium --app=https://youtube.com"
 install_launcher "nerdfonts" "Nerd Fonts cheatsheet"  "Ctrl+Shift+Space"   "helium --app=https://www.nerdfonts.com/cheat-sheet"
 
-# --- 4. Refresh KDE service cache so the .desktop files are pickable ---
+# --- 5. Refresh KDE service cache so the .desktop files are pickable ---
 
 if command -v kbuildsycoca6 >/dev/null 2>&1; then
     kbuildsycoca6 >/dev/null 2>&1 || true
 fi
 
-echo "Ixtli shortcuts configured:"
+echo "Kwilt shortcuts configured:"
 echo "  - 8 Plasma KWin defaults disabled (Quick Tile, Move to Screen, Meta+Tab from Walk Through)"
-echo "  - 20 launcher .desktop entries installed under ${desktop_dir}/ixtli-spawn-*.desktop"
+echo "  - Any pre-rename ixtli-spawn-*.desktop entries removed"
+echo "  - 20 launcher .desktop entries installed under ${desktop_dir}/kwilt-spawn-*.desktop"
 echo "  - All bindings written to ~/.config/kglobalshortcutsrc"
 echo
 echo "Press Meta+Return to test. If nothing fires, log out and back in once"

@@ -1,6 +1,8 @@
-# Ixtli
+# Kwilt
 
 Personal KWin tiling script.
+
+> **Renamed from Ixtli in v0.7.1-beta.3.** If you have v0.7.0-beta.2 or earlier installed, see [Migrating from Ixtli](#migrating-from-ixtli) below before installing.
 
 ## Layouts
 
@@ -70,9 +72,9 @@ At most two windows visible, side-by-side. Adding a 3rd window knocks out the ol
 
 ## Configuration
 
-Two equivalent paths — both read/write `~/.config/kwinrc` under `[Script-ixtli]`.
+Two equivalent paths — both read/write `~/.config/kwinrc` under `[Script-kwilt]`.
 
-**GUI** — System Settings → Window Management → KWin Scripts → click the gear icon next to *Ixtli* (or the *Configure* button, depending on Plasma version). Form built from `contents/ui/config.ui` against the kcfg schema in `contents/config/main.xml`. **Apply** writes the kwinrc keys; values take effect on the next script reload (toggle Ixtli off and on in the same dialog, or relogin).
+**GUI** — System Settings → Window Management → KWin Scripts → click the gear icon next to *Kwilt* (or the *Configure* button, depending on Plasma version). Form built from `contents/ui/config.ui` against the kcfg schema in `contents/config/main.xml`. **Apply** writes the kwinrc keys; values take effect on the next script reload (toggle Kwilt off and on in the same dialog, or relogin).
 
 **CLI / scriptable** — change values directly and reload:
 
@@ -91,8 +93,8 @@ Two equivalent paths — both read/write `~/.config/kwinrc` under `[Script-ixtli
 Set via:
 
 ```sh
-kwriteconfig6 --file kwinrc --group Script-ixtli --key Layout autoGrid
-kwriteconfig6 --file kwinrc --group Script-ixtli --key CenterTileWidth1 0.9
+kwriteconfig6 --file kwinrc --group Script-kwilt --key Layout autoGrid
+kwriteconfig6 --file kwinrc --group Script-kwilt --key CenterTileWidth1 0.9
 ./dev-reload.sh
 ```
 
@@ -104,7 +106,7 @@ Out-of-range values are clamped to the listed range. Invalid `Layout` strings fa
 **As a user — packaged release.** Grab the latest `.kwinscript` from the [Releases tab](../../releases) and install it:
 
 ```sh
-kpackagetool6 -t KWin/Script -i ixtli-*.kwinscript
+kpackagetool6 -t KWin/Script -i kwilt-*.kwinscript
 ```
 
 Then enable in **System Settings → Window Management → KWin Scripts** and run `scripts/setup-shortcuts.sh` once to seed app-launcher bindings + clear conflicting Plasma defaults.
@@ -113,7 +115,7 @@ Then enable in **System Settings → Window Management → KWin Scripts** and ru
 
 ```sh
 mkdir -p "$HOME/.local/share/kwin/scripts"
-ln -s "$PWD" "$HOME/.local/share/kwin/scripts/ixtli"
+ln -s "$PWD" "$HOME/.local/share/kwin/scripts/kwilt"
 ```
 
 The repo symlink and the `kpackagetool6` install **conflict** at the same path — `scripts/install-local.sh` refuses to clobber the symlink. Pick one mode at a time.
@@ -137,7 +139,35 @@ Important: KWin's `loadScript` over D-Bus **registers but doesn't start** the sc
 journalctl -f QT_CATEGORY=js QT_CATEGORY=kwin_scripting
 ```
 
-Look for `[ixtli]` lines. The KWin Scripting Console (`Alt+F2` → `wm console`) is also available for one-off experiments; its output goes to the same journal stream.
+Look for `[kwilt]` lines. The KWin Scripting Console (`Alt+F2` → `wm console`) is also available for one-off experiments; its output goes to the same journal stream.
+
+## Migrating from Ixtli
+
+v0.7.1-beta.3 renames the plugin Id and display name. Existing users on v0.7.0-beta.2 or earlier need a one-time cleanup before the new install will pick up cleanly:
+
+```sh
+# 1. Remove the old packaged install (no-op if you never ran install-local).
+kpackagetool6 -t KWin/Script -r ixtli 2>/dev/null || true
+
+# 2. Replace the dev symlink, if you use one.
+rm -f "$HOME/.local/share/kwin/scripts/ixtli"
+ln -s "$PWD" "$HOME/.local/share/kwin/scripts/kwilt"
+
+# 3. Migrate config from [Script-ixtli] to [Script-kwilt].
+#    Keys to copy: Layout, CapAutoGrid, CapCenterTile, CenterTileWidth1,
+#    CenterTileSideWidth, OuterGap, InnerGap, BorderlessWhenTiled, AlwaysFloat.
+#    Example for one key:
+old=$(kreadconfig6 --file kwinrc --group Script-ixtli --key Layout --default '')
+[ -n "$old" ] && kwriteconfig6 --file kwinrc --group Script-kwilt --key Layout "$old"
+kwriteconfig6 --file kwinrc --group Script-ixtli --key Layout --delete ''
+
+# 4. Re-run setup-shortcuts.sh — it now sweeps old ixtli-spawn-*.desktop
+#    files and their kglobalshortcutsrc groups before installing the
+#    kwilt-spawn-*.desktop entries.
+./scripts/setup-shortcuts.sh
+```
+
+A logout + login picks up the new bindings cleanly.
 
 ## Known gaps
 
@@ -147,10 +177,10 @@ Look for `[ixtli]` lines. The KWin Scripting Console (`Alt+F2` → `wm console`)
 
 ## Shortcuts
 
-Ixtli registers its **window-management** shortcuts directly. **App launchers** live in KDE's native Custom Shortcuts mechanism — KWin scripts can't spawn processes (no exec API; `callDBus` → systemd-run can't marshal the nested-variant `ExecStart` arg cleanly). Both are configured in one shot by `scripts/setup-shortcuts.sh`, which:
+Kwilt registers its **window-management** shortcuts directly. **App launchers** live in KDE's native Custom Shortcuts mechanism — KWin scripts can't spawn processes (no exec API; `callDBus` → systemd-run can't marshal the nested-variant `ExecStart` arg cleanly). Both are configured in one shot by `scripts/setup-shortcuts.sh`, which:
 
-1. Disables Plasma KWin defaults that collide with Ixtli's bindings (Quick Tile on `Meta+arrows`, Move Window to Screen on `Meta+Shift+Left/Right`, and the `Meta+Tab` half of Walk Through Windows — `Alt+Tab` is preserved).
-2. Installs hidden `.desktop` files under `~/.local/share/applications/ixtli-spawn-*.desktop` for each launcher.
+1. Disables Plasma KWin defaults that collide with Kwilt's bindings (Quick Tile on `Meta+arrows`, Move Window to Screen on `Meta+Shift+Left/Right`, and the `Meta+Tab` half of Walk Through Windows — `Alt+Tab` is preserved).
+2. Installs hidden `.desktop` files under `~/.local/share/applications/kwilt-spawn-*.desktop` for each launcher.
 3. Binds each `.desktop` to a key via `~/.config/kglobalshortcutsrc`.
 
 Run it once after installing the script package:
@@ -176,7 +206,7 @@ Re-runnable safely. After running, log out and back in once if a shortcut doesn'
 | `Meta+Tab` | Cycle focus through visible tiles |
 | `Meta+U` | Focus most-recently-focused window (toggle) |
 
-Rebind in **System Settings → Shortcuts → KWin** (search for `Ixtli:`).
+Rebind in **System Settings → Shortcuts → KWin** (search for `Kwilt:`).
 
 ### App launchers (via setup-shortcuts.sh)
 
@@ -189,4 +219,4 @@ Rebind in **System Settings → Shortcuts → KWin** (search for `Ixtli:`).
 | `Meta+Alt+A/D/G/N/U/Y` | Helium webapps: Audible / Discord / Gemini / Netflix / Upwork / YouTube |
 | `Ctrl+Shift+Space` | Nerd Fonts cheatsheet (Helium webapp) |
 
-Rebind in **System Settings → Shortcuts → Custom Shortcuts** (entries named `Ixtli: …`). To remove all launcher bindings, delete the `ixtli-spawn-*.desktop` files and the matching groups in `kglobalshortcutsrc`.
+Rebind in **System Settings → Shortcuts → Custom Shortcuts** (entries named `Kwilt: …`). To remove all launcher bindings, delete the `kwilt-spawn-*.desktop` files and the matching groups in `kglobalshortcutsrc`.

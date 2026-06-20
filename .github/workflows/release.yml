@@ -41,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           json_version=$(jq -r '.KPlugin.Version' metadata.json)
-          artifact="build/ixtli-${json_version}.kwinscript"
+          artifact="build/kwilt-${json_version}.kwinscript"
           if [ ! -f "$artifact" ]; then
             echo "::error::Expected ${artifact} not produced by scripts/package.sh"
             exit 1
@@ -52,20 +52,23 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/ixtli-*.kwinscript
+          files: build/kwilt-*.kwinscript
           # Pre-release if: v0.x (whole 0.x line is unstable) OR any tag
           # carrying a semver pre-release suffix (v0.6.0-beta.1, v1.0.0-rc.2).
           # Plain v1.0.0+ publishes as stable.
           prerelease: ${{ startsWith(github.ref_name, 'v0.') || contains(github.ref_name, '-') }}
           generate_release_notes: true
           body: |
-            Ixtli ${{ github.ref_name }}
+            Kwilt ${{ github.ref_name }}
 
             **Install**
 
             ```sh
-            # Download ixtli-<VERSION>.kwinscript from the assets below, then:
-            kpackagetool6 -t KWin/Script -i ixtli-*.kwinscript
+            # Download kwilt-<VERSION>.kwinscript from the assets below, then:
+            kpackagetool6 -t KWin/Script -i kwilt-*.kwinscript
+            # Note: Kwilt was renamed from Ixtli in v0.7.1-beta.3. If you have
+            # the old plugin installed, remove it first:
+            #   kpackagetool6 -t KWin/Script -r ixtli
             # Enable in System Settings → Window Management → KWin Scripts.
             ```
 
