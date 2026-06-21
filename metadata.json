@@ -5,7 +5,7 @@
         "Name": "Kwilt",
         "Description": "Window tiling with four layouts (autoGrid, centerTile, monocle, dual), per-output queues, keyboard focus/swap, and drag-to-rearrange.",
         "Icon": "preferences-system-windows-script-test",
-        "Version": "0.7.1-beta.3",
+        "Version": "0.7.1-beta.4",
         "License": "GPL-3.0-or-later",
         "EnabledByDefault": false,
         "Authors": [

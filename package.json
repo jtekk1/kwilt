@@ -1,6 +1,6 @@
 {
   "name": "kwilt",
-  "version": "0.7.1-beta.3",
+  "version": "0.7.1-beta.4",
   "private": true,
   "description": "Tooling for the Kwilt KWin tiling script. The script itself is contents/code/main.js and runs inside KWin, not Node.",
   "scripts": {
