@@ -4,6 +4,24 @@ Personal KWin tiling script.
 
 > **Renamed from Ixtli in v0.7.1-beta.3.** If you have v0.7.0-beta.2 or earlier installed, see [Migrating from Ixtli](#migrating-from-ixtli) below before installing.
 
+## Screenshots
+
+**centerTile, N=7** — center column wide; left and right columns each in thirds.
+
+![centerTile N=7](docs/screenshots/centertile-n7.png)
+
+**autoGrid, N=4** — clockwise quartered (TL → TR → BR → BL).
+
+![autoGrid N=4](docs/screenshots/autogrid-n4.png)
+
+**autoGrid, N=5** — W1 spans the full left column; W2…W5 fill the right 2×2 block (signature smooth transition between the 2×2 and 2×3 perfect grids).
+
+![autoGrid N=5](docs/screenshots/autogrid-n5.png)
+
+**autoGrid, N=6** — perfect 2×3 grid, row-major.
+
+![autoGrid N=6](docs/screenshots/autogrid-n6.png)
+
 ## Layouts
 
 Selected via the `LAYOUT` constant at the top of `contents/code/main.js`. Two are implemented:
