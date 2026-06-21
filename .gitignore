@@ -11,3 +11,6 @@ build/
 
 # Working file for commit messages — see memory/feedback-commit-workflow.
 commit.txt
+
+# Personal scratch backlog — not for the repo.
+todo.md
