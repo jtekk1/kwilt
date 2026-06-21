@@ -3,7 +3,7 @@
     "KPlugin": {
         "Id": "kwilt",
         "Name": "Kwilt",
-        "Description": "Per-output, per-desktop window tiling with auto-grid and center-tile layouts.",
+        "Description": "Window tiling with four layouts (autoGrid, centerTile, monocle, dual), per-output queues, keyboard focus/swap, and drag-to-rearrange.",
         "Icon": "preferences-system-windows-script-test",
         "Version": "0.7.1-beta.3",
         "License": "GPL-3.0-or-later",
