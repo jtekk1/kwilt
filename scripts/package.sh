@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 jtekk <jtekk@jtekk.dev>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 # Build a .kwinscript archive for KWin / KDE Store distribution.
 #
 # A .kwinscript is just a ZIP with metadata.json at the root. KWin installs it

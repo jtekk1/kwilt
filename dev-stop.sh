@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 jtekk <jtekk@jtekk.dev>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 # Stop and unload the Kwilt KWin script.
 # unloadScript handles stop + teardown in one call.
 

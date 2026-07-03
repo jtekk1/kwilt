@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
+  SPDX-FileCopyrightText: 2026 jtekk <jtekk@jtekk.dev>
+  SPDX-License-Identifier: GPL-3.0-or-later
+
   Kwilt — System Settings → Window Management → KWin Scripts → Configure.
 
   Plasma 6 KWin scripts use Qt Designer XML (.ui) for their config form, NOT

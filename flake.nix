@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 jtekk <jtekk@jtekk.dev>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 {
   description = "Kwilt — dev shell for the KWin tiling script.";
 
@@ -19,10 +22,11 @@
             shellcheck
             jq
             nodejs_22
+            reuse
           ];
 
           shellHook = ''
-            echo "kwilt dev shell — shellcheck $(shellcheck --version | awk '/^version:/{print $2}'), node $(node --version), jq $(jq --version)"
+            echo "kwilt dev shell — shellcheck $(shellcheck --version | awk '/^version:/{print $2}'), node $(node --version), jq $(jq --version), reuse $(reuse --version 2>&1 | awk '/version [0-9]/ {print $NF; exit}')"
           '';
         };
       });
