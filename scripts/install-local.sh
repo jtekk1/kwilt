@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 jtekk <jtekk@jtekk.dev>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 # Install the built .kwinscript via kpackagetool6.
 #
 # This is the end-to-end install path — the real one a user would take. It is

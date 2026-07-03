@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2026 jtekk <jtekk@jtekk.dev>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# REUSE 3.0 annotations for files that can't carry inline SPDX headers
+# (JSON, lockfiles, PNGs) or where an inline HTML comment would clutter
+# the rendered markdown (README.md, CLAUDE.md). Source files with comment
+# support carry their own SPDX headers; REUSE combines both.
+
+version = 1
+
+SPDX-PackageName = "Kwilt"
+SPDX-PackageSupplier = "jtekk <jtekk@jtekk.dev>"
+SPDX-PackageDownloadLocation = "https://github.com/jtekk1/kwilt"
+
+[[annotations]]
+path = [
+    "metadata.json",
+    "package.json",
+    "package-lock.json",
+    "flake.lock",
+    "README.md",
+    "CLAUDE.md",
+    "LICENSE",
+]
+SPDX-FileCopyrightText = "2026 jtekk <jtekk@jtekk.dev>"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+[[annotations]]
+path = "docs/screenshots/**"
+SPDX-FileCopyrightText = "2026 jtekk <jtekk@jtekk.dev>"
+SPDX-License-Identifier = "GPL-3.0-or-later"

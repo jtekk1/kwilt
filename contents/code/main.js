@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 jtekk <jtekk@jtekk.dev>
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 "use strict";
 
 // Kwilt — Phase 0 auto-grid tiler.

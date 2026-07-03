@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 jtekk <jtekk@jtekk.dev>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 # Validates a commit message against Conventional Commits 1.0.0.
 #   https://www.conventionalcommits.org/en/v1.0.0/
 #
