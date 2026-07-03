@@ -64,18 +64,26 @@ const CFG = (function () {
   };
 })();
 
-// LAYOUT and CAP are mutable so the cycle-layout shortcut can switch at
-// runtime. The initial value comes from CFG.layout (kwinrc-tunable).
-// monocle and dual are fixed-cap layouts — their cap defines the layout
-// (1 visible / 2 visible) and isn't configurable.
-let LAYOUT = CFG.layout;
+// Layout choice is per-(output, virtualDesktop). `layouts` holds explicit
+// per-key overrides; missing entries fall back to CFG.layout (the
+// kwinrc-tunable global default). setLayoutFor / cycleLayout mutate a
+// single key; new (output, desktop) combos inherit CFG.layout on first
+// read via layoutFor.
+//
+// CAPS is a lookup table by layout name. monocle and dual are fixed-cap
+// layouts — their cap defines the layout (1 visible / 2 visible) and
+// isn't configurable. capFor(key) resolves the cap for whatever layout is
+// active on that key.
+const layouts = new Map();
 const CAPS = {
   autoGrid:   CFG.capAutoGrid,
   centerTile: CFG.capCenterTile,
   monocle:    1,
   dual:       2,
 };
-let CAP = CAPS[LAYOUT];
+
+function layoutFor(key) { return layouts.get(key) || CFG.layout; }
+function capFor(key)    { return CAPS[layoutFor(key)]; }
 
 // App-launcher shortcuts are NOT registered here. KWin scripts can't spawn
 // processes (no exec/spawn API; callDBus → systemd-run doesn't marshal the
@@ -471,8 +479,8 @@ const LAYOUTS = {
   dual:       geometriesDual,
 };
 
-function geometries(n, area) {
-  return LAYOUTS[LAYOUT](n, area);
+function geometries(key, n, area) {
+  return LAYOUTS[layoutFor(key)](n, area);
 }
 
 // Apply user-configured gaps as a post-processing pass on layout rects.
@@ -505,8 +513,8 @@ function applyGaps(rects, area) {
 // tilesFor is the single source of truth for the final, gap-adjusted tile
 // rects used by applyQueue (geometry assignment), handleDrop (drop hit-test),
 // and tileSlotOf (focus/swap neighbor search). Layout functions stay pure.
-function tilesFor(n, area) {
-  return applyGaps(geometries(n, area), area);
+function tilesFor(key, n, area) {
+  return applyGaps(geometries(key, n, area), area);
 }
 
 // Border-toggle helpers. Save the window's original `noBorder` on first
@@ -558,7 +566,7 @@ function applyPin(q, key) {
   if (!pinned) return;
   const idx = q.indexOf(pinned);
   if (idx === -1) return;
-  const split = Math.max(0, q.length - CAP);
+  const split = Math.max(0, q.length - capFor(key));
   if (idx <= split) return;
   const tmp = q[split];
   q[split] = q[idx];
@@ -588,10 +596,11 @@ function applyQueue(key, q, out, desk) {
     }
   }
   applyPin(q, key);
-  const split = Math.max(0, q.length - CAP);
+  const cap = capFor(key);
+  const split = Math.max(0, q.length - cap);
   const knocked = q.slice(0, split);
   const visible = q.slice(split);
-  const geos = tilesFor(visible.length, workArea(out, desk));
+  const geos = tilesFor(key, visible.length, workArea(out, desk));
   for (const w of knocked) {
     if (!w.minimized) w.minimized = true;
   }
@@ -667,7 +676,7 @@ function onMinimizedChanged(w) {
     }
     return;
   }
-  const split = Math.max(0, found.q.length - CAP);
+  const split = Math.max(0, found.q.length - capFor(found.key));
   if (w.minimized) {
     // User minimized a visible tile (taskbar / title-bar button / app). Honor
     // it: drop from the queue so the tile slot collapses instead of leaving
@@ -773,7 +782,7 @@ function handleDrop(w) {
   const found = findContaining(w);
   if (!found) return;
 
-  const split = Math.max(0, found.q.length - CAP);
+  const split = Math.max(0, found.q.length - capFor(found.key));
   const visible = found.q.slice(split);
   const srcVisIdx = visible.indexOf(w);
   if (srcVisIdx === -1) {
@@ -786,7 +795,7 @@ function handleDrop(w) {
   if (!desk || !w.output) { retileKey(found.key); return; }
 
   const area = workArea(w.output, desk);
-  const tiles = tilesFor(visible.length, area);
+  const tiles = tilesFor(found.key, visible.length, area);
 
   const fg = w.frameGeometry;
   const cx = fg.x + fg.width / 2;
@@ -825,15 +834,16 @@ function captureResizeCtx(w) {
   if (!found) return null;
   const desk = singleDesktop(w);
   if (!desk || !w.output) return null;
-  const split = Math.max(0, found.q.length - CAP);
+  const cap = capFor(found.key);
+  const split = Math.max(0, found.q.length - cap);
   const slotIdx = found.idx - split;
   if (slotIdx < 0) return null;
   return {
-    layout: LAYOUT,
+    layout: layoutFor(found.key),
     key: found.key,
     slotIdx: slotIdx,
     area: workArea(w.output, desk),
-    n: Math.min(found.q.length, CAP),
+    n: Math.min(found.q.length, cap),
   };
 }
 
@@ -895,7 +905,7 @@ function onActivated(w) {
   if (!w) return;
   const found = findContaining(w);
   if (found) {
-    const split = Math.max(0, found.q.length - CAP);
+    const split = Math.max(0, found.q.length - capFor(found.key));
     if (found.idx < split) {
       // Knocked-out window activated — promote to most-recent.
       found.q.splice(found.idx, 1);
@@ -909,19 +919,46 @@ function onActivated(w) {
   }
 }
 
-function setLayout(name) {
-  if (!LAYOUTS[name] || name === LAYOUT) return;
-  LAYOUT = name;
-  CAP = CAPS[LAYOUT];
-  log("layout=" + LAYOUT + " cap=" + CAP);
-  // retileAll picks up the new geometries function and CAP — windows past
-  // the new cap are minimized, windows that fit are unminimized.
-  retileAll();
+// Resolve the (output, virtualDesktop) key of the currently focused window.
+// Returns null when there's no active window or its (output, desktop) can't be
+// determined — direct-set / cycle shortcuts log a warning and no-op in that
+// case rather than mutating a random key.
+function activeKey() {
+  const w = workspace.activeWindow;
+  if (!w) return null;
+  const desk = singleDesktop(w);
+  if (!desk || !w.output) return null;
+  return keyFor(w.output, desk);
 }
 
+// Set the layout on a specific (output, virtualDesktop) key. Missing keys
+// inherit CFG.layout via layoutFor, so setting a key to the config default
+// deletes its override — keeps the map from accumulating tombstone entries.
+function setLayoutFor(key, name) {
+  if (!LAYOUTS[name]) return;
+  if (name === layoutFor(key)) return;
+  if (name === CFG.layout) layouts.delete(key);
+  else layouts.set(key, name);
+  log("layout[" + key + "]=" + name + " cap=" + CAPS[name]);
+  retileKey(key);
+}
+
+// Direct-set shortcuts (Meta+Ctrl+G/C/M/D) act on the ACTIVE (output,
+// virtualDesktop). If there's no clear active key, log and skip.
+function setLayout(name) {
+  const key = activeKey();
+  if (!key) { log("setLayout skipped: no active (output, desktop) key"); return; }
+  setLayoutFor(key, name);
+}
+
+// Cycle the ACTIVE key's layout only. Other (output, desktop) keys stay put —
+// this is the whole point of per-key overrides.
 function cycleLayout() {
+  const key = activeKey();
+  if (!key) { log("cycleLayout skipped: no active (output, desktop) key"); return; }
   const names = Object.keys(LAYOUTS);
-  setLayout(names[(names.indexOf(LAYOUT) + 1) % names.length]);
+  const current = layoutFor(key);
+  setLayoutFor(key, names[(names.indexOf(current) + 1) % names.length]);
 }
 
 // Toggle master pin on the active window: pin claims visible[0] on its
@@ -951,12 +988,12 @@ function tileSlotOf(w) {
   if (!w) return null;
   const found = findContaining(w);
   if (!found) return null;
-  const split = Math.max(0, found.q.length - CAP);
+  const split = Math.max(0, found.q.length - capFor(found.key));
   if (found.idx < split) return null;
   const desk = singleDesktop(w);
   if (!desk || !w.output) return null;
   const visibleCount = found.q.length - split;
-  const tiles = tilesFor(visibleCount, workArea(w.output, desk));
+  const tiles = tilesFor(found.key, visibleCount, workArea(w.output, desk));
   const visIdx = found.idx - split;
   return { found: found, split: split, visIdx: visIdx, tiles: tiles };
 }
@@ -1016,7 +1053,7 @@ function cycleFocus() {
   if (!w) return;
   const found = findContaining(w);
   if (!found) return;
-  const split = Math.max(0, found.q.length - CAP);
+  const split = Math.max(0, found.q.length - capFor(found.key));
   const visCount = found.q.length - split;
   if (visCount < 2) return;
   const curVis = found.idx >= split ? (found.idx - split) : -1;
@@ -1063,7 +1100,7 @@ function rebuildQueues() {
 }
 
 function init() {
-  log("loaded; layout=" + LAYOUT + " cap=" + CAP);
+  log("loaded; default layout=" + CFG.layout + " cap=" + CAPS[CFG.layout]);
   const existing = workspace.windowList ? workspace.windowList() : (workspace.clientList ? workspace.clientList() : []);
   for (const w of existing) {
     // _kwiltBound is a Qt dynamic property that persists across script

@@ -87,6 +87,7 @@ At most two windows visible, side-by-side. Adding a 3rd window knocks out the ol
 - Only `normalWindow` top-levels tile. Dialogs, popups, fullscreen, multi-desktop windows stay floating.
 - Activating a knocked-out window (alt-tab onto it) promotes it back into the visible set; the new-oldest is knocked out in its place.
 - Dragging a tiled window onto another tile swaps them. Drag onto empty/own tile or resize → snap back.
+- **Layout is per-(output, virtualDesktop)**. The layout shortcuts (cycle + direct-set) act on the (output, virtualDesktop) of the currently active window — different monitors and different virtual desktops keep independent layouts. New (output, virtualDesktop) combos inherit the `Layout` config default. Per-key overrides are session-only and reset on script reload.
 
 ## Configuration
 
@@ -98,7 +99,7 @@ Two equivalent paths — both read/write `~/.config/kwinrc` under `[Script-kwilt
 
 | Key | Type | Default | Range | Notes |
 |---|---|---|---|---|
-| `Layout` | string | `centerTile` | `centerTile` / `autoGrid` / `monocle` / `dual` | Boot-time layout. `Meta+Ctrl+Shift+L` cycles at runtime. |
+| `Layout` | string | `centerTile` | `centerTile` / `autoGrid` / `monocle` / `dual` | Default layout for new (output, virtualDesktop) combos. Runtime per-key overrides via `Meta+Ctrl+G/C/M/D` and cycle via `Meta+Ctrl+Shift+L` act on the active (output, virtualDesktop) only. |
 | `CapAutoGrid` | int | `12` | `1`–`12` | Visible cap before knockout in autoGrid. |
 | `CapCenterTile` | int | `9` | `1`–`9` | Visible cap before knockout in centerTile. |
 | `CenterTileWidth1` | float | `0.85` | `0.5`–`1.0` | N=1 column width as fraction of work area in centerTile. |
@@ -211,11 +212,11 @@ Re-runnable safely. After running, log out and back in once if a shortcut doesn'
 
 | Default | Action |
 |---|---|
-| `Meta+Ctrl+Shift+L` | Cycle window layout (autoGrid → centerTile → monocle → dual) |
-| `Meta+Ctrl+G` | Set layout: autoGrid |
-| `Meta+Ctrl+C` | Set layout: centerTile |
-| `Meta+Ctrl+M` | Set layout: monocle |
-| `Meta+Ctrl+D` | Set layout: dual |
+| `Meta+Ctrl+Shift+L` | Cycle layout on the active (output, virtualDesktop): autoGrid → centerTile → monocle → dual |
+| `Meta+Ctrl+G` | Set layout on active (output, virtualDesktop): autoGrid |
+| `Meta+Ctrl+C` | Set layout on active (output, virtualDesktop): centerTile |
+| `Meta+Ctrl+M` | Set layout on active (output, virtualDesktop): monocle |
+| `Meta+Ctrl+D` | Set layout on active (output, virtualDesktop): dual |
 | `Meta+S` | Toggle master pin on active window (claims the master slot on its output/desktop; session-only) |
 | `Meta+Ctrl+Shift+R` | Rebuild tile queues from current windows (ghost-slot recovery) |
 | `Meta+Left/Right/Up/Down` | Focus tile in that direction |
