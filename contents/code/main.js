@@ -705,16 +705,20 @@ function bindWindow(w) {
   if (w.interactiveMoveResizeStarted) {
     w.interactiveMoveResizeStarted.connect(function () {
       w._kwiltDragMode = w.move ? "move" : (w.resize ? "resize" : null);
+      w._kwiltResizeCtx = w._kwiltDragMode === "resize" ? captureResizeCtx(w) : null;
     });
   }
   if (w.interactiveMoveResizeFinished) {
     w.interactiveMoveResizeFinished.connect(function () {
       const mode = w._kwiltDragMode;
+      const ctx  = w._kwiltResizeCtx;
       w._kwiltDragMode = null;
+      w._kwiltResizeCtx = null;
       if (mode === "move") {
         handleDrop(w);
       } else if (mode === "resize") {
-        // Tiles own geometry; snap back.
+        if (ctx && handleResize(w, ctx)) return;
+        // No adjustable boundary at this slot; tiles own geometry — snap back.
         const found = findContaining(w);
         if (found) retileKey(found.key);
       }
@@ -766,6 +770,65 @@ function handleDrop(w) {
   found.q[dstQIdx] = tmp;
   log("swap slot " + srcVisIdx + " <-> " + dstVisIdx);
   retileKey(found.key);
+}
+
+// Snapshot everything handleResize needs at resize-start: layout, queue key,
+// the window's slot in the visible tile array, current work area, visible-N.
+// Returns null when the window can't map cleanly to a slot (untracked, on
+// multiple desktops, no output, or knocked-out) — handleResize is skipped on
+// finish and the existing snap-back path runs like before.
+function captureResizeCtx(w) {
+  const found = findContaining(w);
+  if (!found) return null;
+  const desk = singleDesktop(w);
+  if (!desk || !w.output) return null;
+  const split = Math.max(0, found.q.length - CAP);
+  const slotIdx = found.idx - split;
+  if (slotIdx < 0) return null;
+  return {
+    layout: LAYOUT,
+    key: found.key,
+    slotIdx: slotIdx,
+    area: workArea(w.output, desk),
+    n: Math.min(found.q.length, CAP),
+  };
+}
+
+// Translate a finished interactive resize into a tunable adjustment. Returns
+// true when a tunable was updated and retileKey scheduled; false when the
+// slot has no adjustable boundary (caller falls back to snap-back). Only
+// centerTile has adjustable tunables today — autoGrid is fully derived,
+// monocle fills the work area, dual is plain 50/50.
+//
+// Writes are IN-MEMORY: KWin's script API exposes readConfig but not
+// writeConfig, so the new value survives until the next script reload
+// (login, KCM save, dev cycle). Persistence via kwriteconfig6-through-
+// callDBus is a follow-up — same write-path problem as the 0.8.0 anchor.
+function handleResize(w, ctx) {
+  if (ctx.layout !== "centerTile") return false;
+  const fg = w.frameGeometry;
+  const aw = ctx.area.width;
+  // N=1: the sole tile fills a tunable-width center column.
+  if (ctx.n === 1) {
+    const frac = clamp(fg.width / aw, 0.5, 1.0);
+    CFG.centerTileWidth1 = frac;
+    log("centerTileWidth1 = " + frac.toFixed(3) + " (in-memory)");
+    retileKey(ctx.key);
+    return true;
+  }
+  // N=2: plain 50/50 — no tunable to move.
+  if (ctx.n === 2) return false;
+  // N>=3: master (slot 0) width = area.w - 2*sideW → back-solve sideW.
+  // Sides (slot 1+) have width = sideW → read directly. Both slots write
+  // the same tunable (centerTileSideWidth).
+  const frac = ctx.slotIdx === 0
+    ? (aw - fg.width) / (2 * aw)
+    : fg.width / aw;
+  const clamped = clamp(frac, 0.15, 0.45);
+  CFG.centerTileSideWidth = clamped;
+  log("centerTileSideWidth = " + clamped.toFixed(3) + " (in-memory)");
+  retileKey(ctx.key);
+  return true;
 }
 
 function onAdded(w) {
