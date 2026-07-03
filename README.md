@@ -2,8 +2,6 @@
 
 Personal KWin tiling script.
 
-> **Renamed from Ixtli in v0.7.1-beta.3.** If you have v0.7.0-beta.2 or earlier installed, see [Migrating from Ixtli](#migrating-from-ixtli) below before installing.
-
 ## Screenshots
 
 **centerTile, N=7** — center column wide; left and right columns each in thirds.
@@ -159,34 +157,6 @@ journalctl -f QT_CATEGORY=js QT_CATEGORY=kwin_scripting
 ```
 
 Look for `[kwilt]` lines. The KWin Scripting Console (`Alt+F2` → `wm console`) is also available for one-off experiments; its output goes to the same journal stream.
-
-## Migrating from Ixtli
-
-v0.7.1-beta.3 renames the plugin Id and display name. Existing users on v0.7.0-beta.2 or earlier need a one-time cleanup before the new install will pick up cleanly:
-
-```sh
-# 1. Remove the old packaged install (no-op if you never ran install-local).
-kpackagetool6 -t KWin/Script -r ixtli 2>/dev/null || true
-
-# 2. Replace the dev symlink, if you use one.
-rm -f "$HOME/.local/share/kwin/scripts/ixtli"
-ln -s "$PWD" "$HOME/.local/share/kwin/scripts/kwilt"
-
-# 3. Migrate config from [Script-ixtli] to [Script-kwilt].
-#    Keys to copy: Layout, CapAutoGrid, CapCenterTile, CenterTileWidth1,
-#    CenterTileSideWidth, OuterGap, InnerGap, BorderlessWhenTiled, AlwaysFloat.
-#    Example for one key:
-old=$(kreadconfig6 --file kwinrc --group Script-ixtli --key Layout --default '')
-[ -n "$old" ] && kwriteconfig6 --file kwinrc --group Script-kwilt --key Layout "$old"
-kwriteconfig6 --file kwinrc --group Script-ixtli --key Layout --delete ''
-
-# 4. Re-run setup-shortcuts.sh — it now sweeps old ixtli-spawn-*.desktop
-#    files and their kglobalshortcutsrc groups before installing the
-#    kwilt-spawn-*.desktop entries.
-./scripts/setup-shortcuts.sh
-```
-
-A logout + login picks up the new bindings cleanly.
 
 ## Known gaps
 
