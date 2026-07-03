@@ -87,6 +87,13 @@ let CAP = CAPS[LAYOUT];
 // Map<string, Window[]>: key = `${outputId}|${desktopId}`
 const queues = new Map();
 
+// Map<string, Window>: key = `${outputId}|${desktopId}` — the pinned "master"
+// window for that (output, desktop). At most one pin per key. Session-only:
+// not persisted across script reload. applyPin (called from applyQueue) is
+// what makes it take effect by reordering the queue so the pin lands at the
+// visible[0] slot; toggleMasterPin (Meta+S) sets/clears it.
+const pins = new Map();
+
 function outputId(out) {
   if (!out) return "null";
   return out.serialNumber || out.name || String(out);
@@ -539,6 +546,34 @@ function findContaining(w) {
   return null;
 }
 
+// If a pin exists on `key` and the pinned window is currently in the queue's
+// visible slice, swap it into the queue position that maps to visible[0].
+// No-op when the pin isn't set, isn't in this queue right now (maximized /
+// fullscreened / temporarily out), or is knocked out — pin persists silently
+// in those cases and re-takes visible[0] as soon as it's visible again. Sticky
+// under drag-swap: dropping another tile onto the master position gets undone
+// on the next retile as the pin swaps back.
+function applyPin(q, key) {
+  const pinned = pins.get(key);
+  if (!pinned) return;
+  const idx = q.indexOf(pinned);
+  if (idx === -1) return;
+  const split = Math.max(0, q.length - CAP);
+  if (idx <= split) return;
+  const tmp = q[split];
+  q[split] = q[idx];
+  q[idx] = tmp;
+}
+
+// Clear any pin entry pointing at `w` (there is at most one per window, since
+// a window is only in one queue). Called from onWindowClosed so terminated
+// windows don't leave dead refs in the pin map.
+function clearPinsFor(w) {
+  for (const [k, pw] of pins) {
+    if (pw === w) { pins.delete(k); return; }
+  }
+}
+
 function applyQueue(key, q, out, desk) {
   // Defensive prune: drop entries that are no longer tileable, no longer on
   // this output, or no longer on this desktop. Belt-and-suspenders for state
@@ -552,6 +587,7 @@ function applyQueue(key, q, out, desk) {
       q.splice(i, 1);
     }
   }
+  applyPin(q, key);
   const split = Math.max(0, q.length - CAP);
   const knocked = q.slice(0, split);
   const visible = q.slice(split);
@@ -602,6 +638,12 @@ function untrack(w) {
 function migrate(w) {
   const oldKey = untrack(w);
   const newKey = track(w);
+  // Pin travels with the window across (output, desktop) changes. If the
+  // window isn't tileable at the new key (newKey === null), the pin drops.
+  if (oldKey && pins.get(oldKey) === w) {
+    pins.delete(oldKey);
+    if (newKey && newKey !== oldKey) pins.set(newKey, w);
+  }
   if (oldKey && oldKey !== newKey) retileKey(oldKey);
   if (newKey) retileKey(newKey);
 }
@@ -689,6 +731,7 @@ function onMaximizedChanged(w) {
 // abruptly, transient surfaces, etc.). Listening to per-window `closed`
 // catches those cases and prevents stale refs from squatting on tile slots.
 function onWindowClosed(w) {
+  clearPinsFor(w);
   const key = untrack(w);
   if (key) retileKey(key);
 }
@@ -881,6 +924,25 @@ function cycleLayout() {
   setLayout(names[(names.indexOf(LAYOUT) + 1) % names.length]);
 }
 
+// Toggle master pin on the active window: pin claims visible[0] on its
+// (output, virtualDesktop) via applyPin. Pressing again on the same window
+// clears the pin; pressing on a different window on the same key replaces
+// the previous pin.
+function toggleMasterPin() {
+  const w = workspace.activeWindow;
+  if (!w) return;
+  const found = findContaining(w);
+  if (!found) { log("pin skipped: window not tracked"); return; }
+  if (pins.get(found.key) === w) {
+    pins.delete(found.key);
+    log("unpinned master on " + found.key);
+  } else {
+    pins.set(found.key, w);
+    log("pinned '" + (w.resourceName || "?") + "' as master on " + found.key);
+  }
+  retileKey(found.key);
+}
+
 // tileSlotOf returns the visible-tile context of a window, or null if the
 // window isn't tiled or is currently knocked out. Used by every keyboard-
 // driven focus/swap so the layout's geometry function is the single source
@@ -1041,6 +1103,9 @@ function init() {
   registerShortcut("KwiltLayoutCenter",  "Kwilt: Layout — centerTile",      "Meta+Ctrl+C",       function () { setLayout("centerTile"); });
   registerShortcut("KwiltLayoutMonocle", "Kwilt: Layout — monocle",         "Meta+Ctrl+M",       function () { setLayout("monocle"); });
   registerShortcut("KwiltLayoutDual",    "Kwilt: Layout — dual",            "Meta+Ctrl+D",       function () { setLayout("dual"); });
+
+  // Master pin: pinned window claims visible[0] on its (output, virtualDesktop).
+  registerShortcut("KwiltPinMaster",     "Kwilt: Toggle master pin on active window", "Meta+S",  toggleMasterPin);
 
   // Manual recovery: re-snapshot the queues from workspace.windowList().
   // Use when you suspect a ghost tile slot — quicker than ./dev-reload.sh.
