@@ -22,24 +22,24 @@ Personal KWin tiling script.
 
 ## Layouts
 
-Selected via the `LAYOUT` constant at the top of `contents/code/main.js`. Two are implemented:
+Six layouts are implemented. Choose the default via `Layout` in the config UI (System Settings → Window Management → KWin Scripts → Kwilt → Configure), or via `kwriteconfig6 --file kwinrc --group Script-kwilt --key Layout <name>`. Set on the active (output, virtualDesktop) at runtime via the layout shortcuts (`Meta+Ctrl+G/C/M/D/L/T`) or cycle with `Meta+Ctrl+Shift+L`.
 
-### `centerTile` (current default; cap = 9)
+### `centerTile` (default; cap = 9)
 
-40% center column, 30% left and right. Sides grow downward as windows are added; when side counts are uneven, **left fills first**.
+Center column at `MasterWidth` fraction of the work area (default `0.5`), side columns share the remainder equally at `(1 - MasterWidth) / 2` each (default `0.25`). Sides grow downward as windows are added; when side counts are uneven, **left fills first**.
 
 | N | Layout |
 |---|---|
-| 1 | centered 85% column (full height) |
+| 1 | full work area |
 | 2 | left half / right half (intentional break from center+side) |
-| 3 | left 30% / center 40% / right 30% |
+| 3 | left 25% / center 50% / right 25% (defaults) |
 | 4 | center / left split 1/2 height / right full / left-bot |
 | 5 | center / left 1/2 / right 1/2 / left-bot / right-bot |
 | 6 | center / left 1/3 / right 1/2 / left-mid / right-bot / left-bot |
 | 7 | center / left 1/3 / right 1/3 / left-mid / right-mid / left-bot / right-bot |
 | 8 | center / 4 left (quarters) / 3 right (thirds) — asymmetric, left fills first |
 | 9 | center / 4 left (quarters) / 4 right (quarters) |
-| 10+ | oldest knocked out — visible cap is 9 |
+| 10+ | oldest knocked out — visible cap is 9 (`CapCenterTile = 0` also falls back to 9; geometry defined for N=1..9) |
 
 ### `autoGrid` (cap = 12)
 
@@ -80,6 +80,29 @@ At most two windows visible, side-by-side. Adding a 3rd window knocks out the ol
 | 2 | left half / right half |
 | 3+ | oldest is knocked out — visible cap is 2 |
 
+### `leftTile` (cap = 9 default, tunable)
+
+Master column anchored to the **left** at `MasterWidth` fraction (default `0.5`); non-master area to the right. Column count in the non-master area is `NonMasterColumns`: `1` = single wide column with equal-height rows; `2` = inner + outer columns with the 2-column fill order below. `0` (default) picks automatically — ultrawide monitors (aspect ratio > 2:1) get 2 columns, everything else gets 1.
+
+**2-column fill order** — outer column grows first each pair. Non-master 1 goes to inner-row-1, non-master 2 to outer-row-1, then odd non-masters land in the outer column (row `ceil(k/2)`) and even non-masters in the inner column (row `k/2`). Row counts: `inner = floor(n_nm/2)`, `outer = ceil(n_nm/2)`.
+
+| N | 1 non-master col | 2 non-master cols |
+|---|---|---|
+| 1 | full work area | full work area |
+| 2 | master / non-master (50/50) | master / non-master (full-height single column) |
+| 3 | master / 2 non-master rows | master / inner (full) / outer (full) — 50/25/25 |
+| 4 | master / 3 non-master rows | master / inner (full) / outer split 2 rows |
+| 5 | master / 4 non-master rows | master / inner split 2 rows / outer split 2 rows |
+| 6 | master / 5 non-master rows | master / inner 2 rows / outer 3 rows |
+| 7 | master / 6 non-master rows | master / inner 3 rows / outer 3 rows |
+| 8 | master / 7 non-master rows | master / inner 3 rows / outer 4 rows |
+| 9 | master / 8 non-master rows | master / inner 4 rows / outer 4 rows |
+| 10+ | oldest is knocked out — visible cap is `CapLeftTile` (default 9; `0` = unlimited) |
+
+### `rightTile` (cap = 9 default, tunable)
+
+Mirror of `leftTile` — master column anchored to the **right**; non-master area (with the same 1- or 2-column rules) to the left. All spec details identical to `leftTile` with the horizontal axis flipped.
+
 ### Shared behavior
 
 - Only `normalWindow` top-levels tile. Dialogs, popups, fullscreen, multi-desktop windows stay floating.
@@ -97,11 +120,13 @@ Two equivalent paths — both read/write `~/.config/kwinrc` under `[Script-kwilt
 
 | Key | Type | Default | Range | Notes |
 |---|---|---|---|---|
-| `Layout` | string | `centerTile` | `centerTile` / `autoGrid` / `monocle` / `dual` | Default layout for new (output, virtualDesktop) combos. Runtime per-key overrides via `Meta+Ctrl+G/C/M/D` and cycle via `Meta+Ctrl+Shift+L` act on the active (output, virtualDesktop) only. |
-| `CapAutoGrid` | int | `12` | `1`–`12` | Visible cap before knockout in autoGrid. |
-| `CapCenterTile` | int | `9` | `1`–`9` | Visible cap before knockout in centerTile. |
-| `CenterTileWidth1` | float | `0.85` | `0.5`–`1.0` | N=1 column width as fraction of work area in centerTile. |
-| `CenterTileSideWidth` | float | `0.30` | `0.15`–`0.45` | Each side column's width fraction at N=3+ in centerTile; center absorbs the rest. |
+| `Layout` | string | `centerTile` | `centerTile` / `autoGrid` / `monocle` / `dual` / `leftTile` / `rightTile` | Default layout for new (output, virtualDesktop) combos. Runtime per-key overrides via `Meta+Ctrl+G/C/M/D/L/T` and cycle via `Meta+Ctrl+Shift+L` act on the active (output, virtualDesktop) only. |
+| `CapAutoGrid` | int | `12` | `0`–`12` | Visible cap before knockout in autoGrid. `0` = unlimited; falls back to `12` (geometry defined for N=1..12). |
+| `CapCenterTile` | int | `9` | `0`–`9` | Visible cap before knockout in centerTile. `0` = unlimited; falls back to `9` (geometry defined for N=1..9). |
+| `CapLeftTile` | int | `9` | `0`–`12` | Visible cap before knockout in leftTile. `0` = unlimited — leftTile scales to arbitrary N. |
+| `CapRightTile` | int | `9` | `0`–`12` | Visible cap before knockout in rightTile. `0` = unlimited — rightTile scales to arbitrary N. |
+| `MasterWidth` | float | `0.5` | `0.15`–`0.85` | Master column width as fraction of the work area. Applies to `centerTile` (N≥3, sides derive as `(1 - MasterWidth) / 2` each), `leftTile` (N≥2), `rightTile` (N≥2). At N=1 every layout fills the work area. |
+| `NonMasterColumns` | int | `0` | `0`–`2` | Non-master column count for `leftTile` / `rightTile`. `0` = auto (aspect ratio > 2:1 → 2 columns; else 1). `1` or `2` = explicit override. `centerTile` ignores this — its column layout is intrinsic. |
 | `OuterGap` | int | `0` | `0`–`80` | Pixels between any tile edge and the work area edge. `0` = flush to the screen. |
 | `InnerGap` | int | `0` | `0`–`80` | Pixels between adjacent tiles. Split halved on each side; odd values round consistently so adjacent gaps sum exactly. |
 | `BorderlessWhenTiled` | bool | `false` | `true` / `false` | Hide window decorations on visible tiles by setting `noBorder`. Original border state is saved per-window and restored on untrack/close/fullscreen. |
@@ -110,8 +135,8 @@ Two equivalent paths — both read/write `~/.config/kwinrc` under `[Script-kwilt
 Set via:
 
 ```sh
-kwriteconfig6 --file kwinrc --group Script-kwilt --key Layout autoGrid
-kwriteconfig6 --file kwinrc --group Script-kwilt --key CenterTileWidth1 0.9
+kwriteconfig6 --file kwinrc --group Script-kwilt --key Layout leftTile
+kwriteconfig6 --file kwinrc --group Script-kwilt --key MasterWidth 0.6
 ./dev-reload.sh
 ```
 
@@ -187,6 +212,8 @@ Re-runnable safely. After running, log out and back in once if a shortcut doesn'
 | `Meta+Ctrl+C` | Set layout on active (output, virtualDesktop): centerTile |
 | `Meta+Ctrl+M` | Set layout on active (output, virtualDesktop): monocle |
 | `Meta+Ctrl+D` | Set layout on active (output, virtualDesktop): dual |
+| `Meta+Ctrl+L` | Set layout on active (output, virtualDesktop): leftTile |
+| `Meta+Ctrl+T` | Set layout on active (output, virtualDesktop): rightTile (T because Meta+Ctrl+R is claimed by Spectacle's Rectangular Region screenshot) |
 | `Meta+S` | Toggle master pin on active window (claims the master slot on its output/desktop; session-only) |
 | `Meta+Ctrl+Shift+R` | Rebuild tile queues from current windows (ghost-slot recovery) |
 | `Meta+Left/Right/Up/Down` | Focus tile in that direction |

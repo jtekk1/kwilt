@@ -25,26 +25,38 @@
 
         <entry name="CapAutoGrid" type="Int">
             <default>12</default>
-            <min>1</min>
+            <min>0</min>
             <max>12</max>
         </entry>
 
         <entry name="CapCenterTile" type="Int">
             <default>9</default>
-            <min>1</min>
+            <min>0</min>
             <max>9</max>
         </entry>
 
-        <entry name="CenterTileWidth1" type="Double">
-            <default>0.85</default>
-            <min>0.5</min>
-            <max>1.0</max>
+        <entry name="CapLeftTile" type="Int">
+            <default>9</default>
+            <min>0</min>
+            <max>12</max>
         </entry>
 
-        <entry name="CenterTileSideWidth" type="Double">
-            <default>0.30</default>
+        <entry name="CapRightTile" type="Int">
+            <default>9</default>
+            <min>0</min>
+            <max>12</max>
+        </entry>
+
+        <entry name="MasterWidth" type="Double">
+            <default>0.5</default>
             <min>0.15</min>
-            <max>0.45</max>
+            <max>0.85</max>
+        </entry>
+
+        <entry name="NonMasterColumns" type="Int">
+            <default>0</default>
+            <min>0</min>
+            <max>2</max>
         </entry>
 
         <entry name="OuterGap" type="Int">
