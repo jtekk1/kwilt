@@ -107,7 +107,8 @@ Mirror of `leftTile` — master column anchored to the **right**; non-master are
 
 - Only `normalWindow` top-levels tile. Dialogs, popups, fullscreen, multi-desktop windows stay floating.
 - Activating a knocked-out window (alt-tab onto it) promotes it back into the visible set; the new-oldest is knocked out in its place.
-- Dragging a tiled window onto another tile swaps them. Drag onto empty/own tile or resize → snap back.
+- Dragging a tiled window onto another tile swaps them. Drag onto empty/own tile → snap back.
+- **Resizing a tiled window** (e.g. `Meta+Right-drag` on Plasma defaults) adjusts the layout: horizontal edge drags update `MasterWidth`; vertical edge drags update per-column row-height ratios (centerTile side columns and leftTile / rightTile 2-column mode). Both writes are in-memory only and reset on script reload — persistence is a shared write-path follow-up.
 - **Layout is per-(output, virtualDesktop)**. The layout shortcuts (cycle + direct-set) act on the (output, virtualDesktop) of the currently active window — different monitors and different virtual desktops keep independent layouts. New (output, virtualDesktop) combos inherit the `Layout` config default. Per-key overrides are session-only and reset on script reload.
 
 ## Configuration
