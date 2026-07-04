@@ -23,7 +23,7 @@
     <x>0</x>
     <y>0</y>
     <width>460</width>
-    <height>380</height>
+    <height>460</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -42,67 +42,92 @@
      <item><property name="text"><string>autoGrid</string></property></item>
      <item><property name="text"><string>monocle</string></property></item>
      <item><property name="text"><string>dual</string></property></item>
+     <item><property name="text"><string>leftTile</string></property></item>
+     <item><property name="text"><string>rightTile</string></property></item>
     </widget>
    </item>
 
    <item row="1" column="0">
     <widget class="QLabel" name="capAutoGridLabel">
-     <property name="text"><string>autoGrid visible cap:</string></property>
+     <property name="text"><string>autoGrid visible cap (0 = unlimited):</string></property>
     </widget>
    </item>
    <item row="1" column="1">
     <widget class="QSpinBox" name="kcfg_CapAutoGrid">
-     <property name="minimum"><number>1</number></property>
+     <property name="minimum"><number>0</number></property>
      <property name="maximum"><number>12</number></property>
     </widget>
    </item>
 
    <item row="2" column="0">
     <widget class="QLabel" name="capCenterTileLabel">
-     <property name="text"><string>centerTile visible cap:</string></property>
+     <property name="text"><string>centerTile visible cap (0 = unlimited):</string></property>
     </widget>
    </item>
    <item row="2" column="1">
     <widget class="QSpinBox" name="kcfg_CapCenterTile">
-     <property name="minimum"><number>1</number></property>
+     <property name="minimum"><number>0</number></property>
      <property name="maximum"><number>9</number></property>
     </widget>
    </item>
 
    <item row="3" column="0">
-    <widget class="QLabel" name="width1Label">
-     <property name="text"><string>centerTile N=1 column width:</string></property>
+    <widget class="QLabel" name="capLeftTileLabel">
+     <property name="text"><string>leftTile visible cap (0 = unlimited):</string></property>
     </widget>
    </item>
    <item row="3" column="1">
-    <widget class="QDoubleSpinBox" name="kcfg_CenterTileWidth1">
-     <property name="minimum"><double>0.5</double></property>
-     <property name="maximum"><double>1.0</double></property>
-     <property name="singleStep"><double>0.05</double></property>
-     <property name="decimals"><number>2</number></property>
+    <widget class="QSpinBox" name="kcfg_CapLeftTile">
+     <property name="minimum"><number>0</number></property>
+     <property name="maximum"><number>12</number></property>
     </widget>
    </item>
 
    <item row="4" column="0">
-    <widget class="QLabel" name="sideWidthLabel">
-     <property name="text"><string>centerTile N≥3 side-column width:</string></property>
+    <widget class="QLabel" name="capRightTileLabel">
+     <property name="text"><string>rightTile visible cap (0 = unlimited):</string></property>
     </widget>
    </item>
    <item row="4" column="1">
-    <widget class="QDoubleSpinBox" name="kcfg_CenterTileSideWidth">
+    <widget class="QSpinBox" name="kcfg_CapRightTile">
+     <property name="minimum"><number>0</number></property>
+     <property name="maximum"><number>12</number></property>
+    </widget>
+   </item>
+
+   <item row="5" column="0">
+    <widget class="QLabel" name="masterWidthLabel">
+     <property name="text"><string>Master column width (fraction of work area):</string></property>
+    </widget>
+   </item>
+   <item row="5" column="1">
+    <widget class="QDoubleSpinBox" name="kcfg_MasterWidth">
      <property name="minimum"><double>0.15</double></property>
-     <property name="maximum"><double>0.45</double></property>
+     <property name="maximum"><double>0.85</double></property>
      <property name="singleStep"><double>0.05</double></property>
      <property name="decimals"><number>2</number></property>
     </widget>
    </item>
 
-   <item row="5" column="0">
+   <item row="6" column="0">
+    <widget class="QLabel" name="nonMasterColumnsLabel">
+     <property name="text"><string>Non-master columns (leftTile / rightTile):</string></property>
+    </widget>
+   </item>
+   <item row="6" column="1">
+    <widget class="QSpinBox" name="kcfg_NonMasterColumns">
+     <property name="minimum"><number>0</number></property>
+     <property name="maximum"><number>2</number></property>
+     <property name="specialValueText"><string>Auto (ultrawide → 2, else 1)</string></property>
+    </widget>
+   </item>
+
+   <item row="7" column="0">
     <widget class="QLabel" name="outerGapLabel">
      <property name="text"><string>Outer gap (px):</string></property>
     </widget>
    </item>
-   <item row="5" column="1">
+   <item row="7" column="1">
     <widget class="QSpinBox" name="kcfg_OuterGap">
      <property name="minimum"><number>0</number></property>
      <property name="maximum"><number>80</number></property>
@@ -110,12 +135,12 @@
     </widget>
    </item>
 
-   <item row="6" column="0">
+   <item row="8" column="0">
     <widget class="QLabel" name="innerGapLabel">
      <property name="text"><string>Inner gap (px):</string></property>
     </widget>
    </item>
-   <item row="6" column="1">
+   <item row="8" column="1">
     <widget class="QSpinBox" name="kcfg_InnerGap">
      <property name="minimum"><number>0</number></property>
      <property name="maximum"><number>80</number></property>
@@ -123,30 +148,30 @@
     </widget>
    </item>
 
-   <item row="7" column="0">
+   <item row="9" column="0">
     <widget class="QLabel" name="borderlessLabel">
      <property name="text"><string>Hide decorations when tiled:</string></property>
     </widget>
    </item>
-   <item row="7" column="1">
+   <item row="9" column="1">
     <widget class="QCheckBox" name="kcfg_BorderlessWhenTiled">
      <property name="text"><string/></property>
     </widget>
    </item>
 
-   <item row="8" column="0">
+   <item row="10" column="0">
     <widget class="QLabel" name="alwaysFloatLabel">
      <property name="text"><string>Always float (resourceClass, comma-separated):</string></property>
      <property name="wordWrap"><bool>true</bool></property>
     </widget>
    </item>
-   <item row="8" column="1">
+   <item row="10" column="1">
     <widget class="QLineEdit" name="kcfg_AlwaysFloat">
      <property name="placeholderText"><string>kcalc, pavucontrol, plasma-systemmonitor</string></property>
     </widget>
    </item>
 
-   <item row="9" column="0" colspan="2">
+   <item row="11" column="0" colspan="2">
     <widget class="QLabel" name="noteLabel">
      <property name="text">
       <string>Changes apply on the next script reload (toggle Kwilt off and on, or relogin).</string>

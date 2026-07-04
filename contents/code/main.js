@@ -41,7 +41,7 @@ function clamp(value, min, max) {
 // then reload the script (./dev-reload.sh or relogin). Defaults match the
 // hardcoded values that were here before this commit, so an unconfigured
 // kwinrc is a no-op.
-const VALID_LAYOUTS = ["autoGrid", "centerTile", "monocle", "dual"];
+const VALID_LAYOUTS = ["autoGrid", "centerTile", "monocle", "dual", "leftTile", "rightTile"];
 
 const CFG = (function () {
   const layoutRaw = cfg("Layout", "centerTile");
@@ -53,10 +53,19 @@ const CFG = (function () {
     .filter(function (s) { return s.length > 0; });
   return {
     layout: layout,
-    capAutoGrid:        Math.round(clamp(cfg("CapAutoGrid", 12),        1, 12)),
-    capCenterTile:      Math.round(clamp(cfg("CapCenterTile", 9),       1, 9)),
-    centerTileWidth1:               clamp(cfg("CenterTileWidth1", 0.85), 0.5, 1.0),
-    centerTileSideWidth:            clamp(cfg("CenterTileSideWidth", 0.30), 0.15, 0.45),
+    // Caps: 0 = unlimited. autoGrid/centerTile have hardcoded geometry ranges
+    // (see capFor for fallback semantics); leftTile/rightTile scale freely.
+    capAutoGrid:        Math.round(clamp(cfg("CapAutoGrid", 12),        0, 12)),
+    capCenterTile:      Math.round(clamp(cfg("CapCenterTile", 9),       0, 9)),
+    capLeftTile:        Math.round(clamp(cfg("CapLeftTile", 9),         0, 12)),
+    capRightTile:       Math.round(clamp(cfg("CapRightTile", 9),        0, 12)),
+    // Unified master column fraction — used by centerTile (N>=3),
+    // leftTile (N>=2), rightTile (N>=2). Sides derive as (1 - master) / 2.
+    masterWidth:                    clamp(cfg("MasterWidth", 0.5),      0.15, 0.85),
+    // Non-master column count for leftTile/rightTile. 0 = auto (ultrawide
+    // aspect ratio > 2.0 -> 2 cols, else 1); 1 or 2 = explicit override.
+    // centerTile ignores this (its column layout is intrinsic).
+    nonMasterColumns:   Math.round(clamp(cfg("NonMasterColumns", 0),    0, 2)),
     outerGap:           Math.round(clamp(cfg("OuterGap", 0),  0, 80)),
     innerGap:           Math.round(clamp(cfg("InnerGap", 0),  0, 80)),
     borderlessWhenTiled:                cfg("BorderlessWhenTiled", false),
@@ -80,10 +89,42 @@ const CAPS = {
   centerTile: CFG.capCenterTile,
   monocle:    1,
   dual:       2,
+  leftTile:   CFG.capLeftTile,
+  rightTile:  CFG.capRightTile,
 };
 
 function layoutFor(key) { return layouts.get(key) || CFG.layout; }
-function capFor(key)    { return CAPS[layoutFor(key)]; }
+
+// Resolve the visible cap for a key's active layout. 0 in the CFG means
+// "unlimited": leftTile/rightTile scale to arbitrary N via row splits, so
+// they get MAX_SAFE_INTEGER (effectively no cap). autoGrid and centerTile
+// have hardcoded geometry ranges — falling back to their natural max is
+// the least-surprising translation of "unlimited" for them. A one-shot
+// warning at init tells the user which fallback applied.
+function capFor(key) {
+  const layout = layoutFor(key);
+  const raw = CAPS[layout];
+  if (raw > 0) return raw;
+  if (layout === "leftTile" || layout === "rightTile") return Number.MAX_SAFE_INTEGER;
+  if (layout === "autoGrid")   return 12;
+  if (layout === "centerTile") return 9;
+  return raw;
+}
+
+// True when the work area's aspect ratio exceeds 2:1 — the trigger for the
+// NonMasterColumns "auto" mode to pick 2 columns instead of 1. Guards
+// against zero height (defensive; work areas shouldn't be zero-height).
+function isUltrawide(area) {
+  return area.height > 0 && (area.width / area.height) > 2.0;
+}
+
+// Resolve the effective non-master column count for a work area. Explicit
+// CFG values (1 or 2) win; 0 (auto) reads the aspect ratio.
+function effectiveNonMasterColumns(area) {
+  const c = CFG.nonMasterColumns;
+  if (c === 1 || c === 2) return c;
+  return isUltrawide(area) ? 2 : 1;
+}
 
 // App-launcher shortcuts are NOT registered here. KWin scripts can't spawn
 // processes (no exec/spawn API; callDBus → systemd-run doesn't marshal the
@@ -340,11 +381,9 @@ function geometriesCenterTile(n, area) {
   const x = area.x, y = area.y, w = area.width, h = area.height;
   if (n <= 0) return [];
 
-  // N=1: single column at CFG.centerTileWidth1 fraction of width, centered.
-  if (n === 1) {
-    const cw = Math.floor(CFG.centerTileWidth1 * w);
-    return [rect(x + Math.floor((w - cw) / 2), y, cw, h)];
-  }
+  // N=1: single window fills the entire work area. (Matches leftTile /
+  // rightTile N=1 behavior — "1 window = full".)
+  if (n === 1) return [rect(x, y, w, h)];
 
   // N=2: plain halves (intentional break from the center+side pattern).
   if (n === 2) {
@@ -355,9 +394,10 @@ function geometriesCenterTile(n, area) {
     ];
   }
 
-  // N>=3: sides take CFG.centerTileSideWidth fraction each; center absorbs
-  // the rest (and any floor-rounding remainder).
-  const sideW = Math.floor(CFG.centerTileSideWidth * w);
+  // N>=3: sides derive as (1 - MasterWidth) / 2 each; center absorbs the
+  // rest (and any floor-rounding remainder). Master width is the unified
+  // tunable shared with leftTile / rightTile.
+  const sideW = Math.floor(((1 - CFG.masterWidth) / 2) * w);
   const centerW = w - 2 * sideW;
   const leftX = x;
   const centerX = x + sideW;
@@ -472,11 +512,92 @@ function geometriesDual(n, area) {
   ];
 }
 
+// Shared geometry for leftTile (masterOnLeft=true) and rightTile
+// (masterOnLeft=false). Master column anchored to one side at
+// CFG.masterWidth * area.width; non-master area on the other side splits
+// into 1 or 2 columns via effectiveNonMasterColumns(area).
+//
+// 2-column fill order (interpretation A — outer column grows first each
+// pair):
+//   non_master[1] -> col_inner row 1
+//   non_master[2] -> col_outer row 1
+//   for k = 3..n_nm:
+//     k odd  -> col_outer row ceil(k/2)
+//     k even -> col_inner row k/2
+// Row counts: col_inner = floor(n_nm/2), col_outer = ceil(n_nm/2). Last row
+// in each column absorbs any floor-rounding remainder in height.
+//
+// N=1 fills the full area (matches centerTile N=1 and the "1 window = full"
+// user spec). n_nm == 1 in 2-col mode collapses to one wide column.
+function geometriesSideTile(n, area, masterOnLeft) {
+  if (n <= 0) return [];
+  const x = area.x, y = area.y, w = area.width, h = area.height;
+  if (n === 1) return [rect(x, y, w, h)];
+
+  const n_nm = n - 1;
+  const masterW = Math.floor(CFG.masterWidth * w);
+  const nmW = w - masterW;
+  const masterX = masterOnLeft ? x : x + nmW;
+  const nmX     = masterOnLeft ? x + masterW : x;
+  const master = rect(masterX, y, masterW, h);
+
+  const nmCols = effectiveNonMasterColumns(area);
+
+  // 1-column non-master area OR exactly 1 non-master: single wide vertical
+  // stack. Rows are equal-height; last absorbs floor-rounding remainder.
+  if (nmCols === 1 || n_nm === 1) {
+    if (n_nm === 1) return [master, rect(nmX, y, nmW, h)];
+    const rowH = Math.floor(h / n_nm);
+    const tiles = [master];
+    for (let i = 0; i < n_nm; i++) {
+      const yy = y + i * rowH;
+      const hh = (i === n_nm - 1) ? h - i * rowH : rowH;
+      tiles.push(rect(nmX, yy, nmW, hh));
+    }
+    return tiles;
+  }
+
+  // 2-column non-master area with n_nm >= 2.
+  const colInnerW = Math.floor(nmW / 2);
+  const colOuterW = nmW - colInnerW;  // absorbs floor remainder
+  const colInnerX = masterOnLeft ? nmX             : nmX + colOuterW;
+  const colOuterX = masterOnLeft ? nmX + colInnerW : nmX;
+
+  const colInnerRows = Math.floor(n_nm / 2);
+  const colOuterRows = Math.ceil(n_nm / 2);
+  const colInnerRowH = colInnerRows > 0 ? Math.floor(h / colInnerRows) : h;
+  const colOuterRowH = colOuterRows > 0 ? Math.floor(h / colOuterRows) : h;
+
+  function cellRect(colX, colW, row, rowsInCol, rowH) {
+    const yy = y + (row - 1) * rowH;
+    const hh = (row === rowsInCol) ? h - (rowsInCol - 1) * rowH : rowH;
+    return rect(colX, yy, colW, hh);
+  }
+
+  const tiles = [master];
+  tiles.push(cellRect(colInnerX, colInnerW, 1, colInnerRows, colInnerRowH));  // non_master[1]
+  tiles.push(cellRect(colOuterX, colOuterW, 1, colOuterRows, colOuterRowH));  // non_master[2]
+
+  for (let k = 3; k <= n_nm; k++) {
+    if (k % 2 === 1) {
+      tiles.push(cellRect(colOuterX, colOuterW, Math.ceil(k / 2), colOuterRows, colOuterRowH));
+    } else {
+      tiles.push(cellRect(colInnerX, colInnerW, k / 2, colInnerRows, colInnerRowH));
+    }
+  }
+  return tiles;
+}
+
+function geometriesLeftTile(n, area)  { return geometriesSideTile(n, area, true); }
+function geometriesRightTile(n, area) { return geometriesSideTile(n, area, false); }
+
 const LAYOUTS = {
   autoGrid:   geometriesAutoGrid,
   centerTile: geometriesCenterTile,
   monocle:    geometriesMonocle,
   dual:       geometriesDual,
+  leftTile:   geometriesLeftTile,
+  rightTile:  geometriesRightTile,
 };
 
 function geometries(key, n, area) {
@@ -847,39 +968,59 @@ function captureResizeCtx(w) {
   };
 }
 
-// Translate a finished interactive resize into a tunable adjustment. Returns
-// true when a tunable was updated and retileKey scheduled; false when the
-// slot has no adjustable boundary (caller falls back to snap-back). Only
-// centerTile has adjustable tunables today — autoGrid is fully derived,
-// monocle fills the work area, dual is plain 50/50.
+// Translate a finished interactive resize into a MasterWidth adjustment.
+// Returns true when the tunable was updated and retileKey scheduled; false
+// when the slot has no adjustable boundary (caller falls back to snap-
+// back). autoGrid is fully derived, monocle fills the work area, dual is
+// plain 50/50, centerTile N<=2 has no MasterWidth-adjustable boundary.
+//
+// From the resized tile's new width, back-solve MasterWidth:
+//   centerTile N>=3: master = w/aw; side = (1-master)/2 -> master = 1-2*(w/aw)
+//   leftTile/rightTile: master = w/aw when isMaster
+//     non-master: 1-col mode or n_nm=1 -> non_master_frac = 1-master
+//                 2-col mode           -> each col = (1-master)/2
 //
 // Writes are IN-MEMORY: KWin's script API exposes readConfig but not
 // writeConfig, so the new value survives until the next script reload
 // (login, KCM save, dev cycle). Persistence via kwriteconfig6-through-
 // callDBus is a follow-up — same write-path problem as the 0.8.0 anchor.
 function handleResize(w, ctx) {
-  if (ctx.layout !== "centerTile") return false;
   const fg = w.frameGeometry;
   const aw = ctx.area.width;
-  // N=1: the sole tile fills a tunable-width center column.
-  if (ctx.n === 1) {
-    const frac = clamp(fg.width / aw, 0.5, 1.0);
-    CFG.centerTileWidth1 = frac;
-    log("centerTileWidth1 = " + frac.toFixed(3) + " (in-memory)");
-    retileKey(ctx.key);
-    return true;
+  const layout = ctx.layout;
+  const isMaster = ctx.slotIdx === 0;
+
+  // N=1 fills the area in every layout; nothing to move.
+  if (ctx.n === 1) return false;
+  // Layouts without an adjustable boundary at all.
+  if (layout === "monocle" || layout === "dual" || layout === "autoGrid") return false;
+  // centerTile N=2 is plain halves — no MasterWidth applies.
+  if (layout === "centerTile" && ctx.n === 2) return false;
+
+  let masterFrac;
+  if (layout === "centerTile") {
+    masterFrac = isMaster ? fg.width / aw
+                          : 1 - 2 * (fg.width / aw);
+  } else if (layout === "leftTile" || layout === "rightTile") {
+    if (isMaster) {
+      masterFrac = fg.width / aw;
+    } else {
+      const nmCols = effectiveNonMasterColumns(ctx.area);
+      // Single wide non-master column (1-col mode, or only one non-master).
+      if (nmCols === 1 || ctx.n === 2) {
+        masterFrac = 1 - fg.width / aw;
+      } else {
+        // 2 non-master columns: each = (1-master)/2 -> master = 1 - 2*col
+        masterFrac = 1 - 2 * (fg.width / aw);
+      }
+    }
+  } else {
+    return false;
   }
-  // N=2: plain 50/50 — no tunable to move.
-  if (ctx.n === 2) return false;
-  // N>=3: master (slot 0) width = area.w - 2*sideW → back-solve sideW.
-  // Sides (slot 1+) have width = sideW → read directly. Both slots write
-  // the same tunable (centerTileSideWidth).
-  const frac = ctx.slotIdx === 0
-    ? (aw - fg.width) / (2 * aw)
-    : fg.width / aw;
-  const clamped = clamp(frac, 0.15, 0.45);
-  CFG.centerTileSideWidth = clamped;
-  log("centerTileSideWidth = " + clamped.toFixed(3) + " (in-memory)");
+
+  const clamped = clamp(masterFrac, 0.15, 0.85);
+  CFG.masterWidth = clamped;
+  log("masterWidth = " + clamped.toFixed(3) + " (in-memory)");
   retileKey(ctx.key);
   return true;
 }
@@ -1101,6 +1242,10 @@ function rebuildQueues() {
 
 function init() {
   log("loaded; default layout=" + CFG.layout + " cap=" + CAPS[CFG.layout]);
+  // Warn about cap=0 (unlimited) fallbacks on layouts with hardcoded geometry.
+  // leftTile / rightTile scale to arbitrary N and don't warn.
+  if (CFG.capAutoGrid   === 0) log("CapAutoGrid=0 (unlimited) → falls back to 12 (autoGrid geometry defined for N=1..12)");
+  if (CFG.capCenterTile === 0) log("CapCenterTile=0 (unlimited) → falls back to 9 (centerTile geometry defined for N=1..9)");
   const existing = workspace.windowList ? workspace.windowList() : (workspace.clientList ? workspace.clientList() : []);
   for (const w of existing) {
     // _kwiltBound is a Qt dynamic property that persists across script
@@ -1140,6 +1285,8 @@ function init() {
   registerShortcut("KwiltLayoutCenter",  "Kwilt: Layout — centerTile",      "Meta+Ctrl+C",       function () { setLayout("centerTile"); });
   registerShortcut("KwiltLayoutMonocle", "Kwilt: Layout — monocle",         "Meta+Ctrl+M",       function () { setLayout("monocle"); });
   registerShortcut("KwiltLayoutDual",    "Kwilt: Layout — dual",            "Meta+Ctrl+D",       function () { setLayout("dual"); });
+  registerShortcut("KwiltLayoutLeft",    "Kwilt: Layout — leftTile",        "Meta+Ctrl+L",       function () { setLayout("leftTile"); });
+  registerShortcut("KwiltLayoutRight",   "Kwilt: Layout — rightTile",       "Meta+Ctrl+T",       function () { setLayout("rightTile"); });
 
   // Master pin: pinned window claims visible[0] on its (output, virtualDesktop).
   registerShortcut("KwiltPinMaster",     "Kwilt: Toggle master pin on active window", "Meta+S",  toggleMasterPin);
