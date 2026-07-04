@@ -143,6 +143,111 @@ const queues = new Map();
 // visible[0] slot; toggleMasterPin (Meta+S) sets/clears it.
 const pins = new Map();
 
+// Map<string, number[]>: key = `${queueKey}|${layout}|${column}` — per-column
+// row-height ratios for centerTile and (2-col mode) leftTile/rightTile.
+// Ratios sum to 1 and have one entry per row in that column. Missing entries
+// (or a length mismatch when the column's row count has changed since state
+// was written) fall back to equal splits — keeps user-adjusted splits stable
+// at a specific N without needing per-N state buckets. Session-only, like
+// pins — persistence is a shared write-path follow-up.
+//
+// Column names:
+//   centerTile:                  "left" | "right"
+//   leftTile / rightTile 2-col:  "inner" (closer to master) | "outer"
+//   leftTile / rightTile 1-col:  "single"
+const rowSplits = new Map();
+
+// Map<string, number>: key = `${queueKey}|${layout}` (layout in {leftTile,
+// rightTile}), value = inner-column fraction of the non-master area in 2-col
+// mode. Default 0.5 (equal halves). Session-only.
+const interColSplits = new Map();
+
+function interColSplitKey(queueKey, layout) {
+  return queueKey + "|" + layout;
+}
+
+function interColSplitFor(queueKey, layout) {
+  const v = interColSplits.get(interColSplitKey(queueKey, layout));
+  return typeof v === "number" ? v : 0.5;
+}
+
+function rowSplitKey(queueKey, layout, column) {
+  return queueKey + "|" + layout + "|" + column;
+}
+
+function rowSplitFor(queueKey, layout, column, expectedRows) {
+  const rs = rowSplits.get(rowSplitKey(queueKey, layout, column));
+  return (rs && rs.length === expectedRows) ? rs : null;
+}
+
+// Turn row ratios (or an equal-split fallback) into concrete {y, h} pairs
+// summing to totalH. The last row absorbs floor-rounding remainder so the
+// column ends exactly at totalH.
+function computeRowRects(totalH, count, ratios) {
+  const rs = ratios || Array.from({length: count}, function () { return 1 / count; });
+  const rows = [];
+  let acc = 0;
+  for (let i = 0; i < count; i++) {
+    const rh = (i === count - 1) ? totalH - acc : Math.floor(rs[i] * totalH);
+    rows.push({ y: acc, h: rh });
+    acc += rh;
+  }
+  return rows;
+}
+
+// Slot orderings for centerTile at N=3..9. Drives both geometriesCenterTile
+// (tile placement) and centerTileSlotMeta (resize -> row-split routing) so
+// the mapping stays authoritative in one place.
+const CENTER_TILE_ORDER = {
+  3: { left: [1],          right: [2] },
+  4: { left: [1, 3],       right: [2] },
+  5: { left: [1, 3],       right: [2, 4] },
+  6: { left: [1, 3, 5],    right: [2, 4] },
+  7: { left: [1, 3, 5],    right: [2, 4, 6] },
+  8: { left: [1, 3, 5, 7], right: [2, 4, 6] },
+  9: { left: [1, 3, 5, 7], right: [2, 4, 6, 8] },
+};
+
+// Map a centerTile visible slot -> {column, row, colRows}. Slot 0 (master)
+// and out-of-range N return null.
+function centerTileSlotMeta(slotIdx, n) {
+  if (slotIdx === 0) return null;
+  if (n < 3 || n > 9) return null;
+  const order = CENTER_TILE_ORDER[n];
+  const li = order.left.indexOf(slotIdx);
+  if (li !== -1) return { column: "left",  row: li, colRows: order.left.length };
+  const ri = order.right.indexOf(slotIdx);
+  if (ri !== -1) return { column: "right", row: ri, colRows: order.right.length };
+  return null;
+}
+
+// Map a side-tile (leftTile / rightTile) visible slot -> {column, row,
+// colRows} in 2-column non-master mode. Assumes the geometriesSideTile fill
+// algorithm:
+//   slot 1 -> col_inner row 0
+//   slot 2 -> col_outer row 0
+//   slot k>=3: k odd -> col_outer row (k-1)/2 ; k even -> col_inner row k/2-1
+// Row counts: inner = floor(n_nm/2), outer = ceil(n_nm/2). n_nm < 2 returns
+// null (single wide column has nothing to split vertically).
+function sideTileSlotMeta2Col(slotIdx, n_nm) {
+  if (slotIdx === 0) return null;
+  if (n_nm < 2)      return null;
+  const innerRows = Math.floor(n_nm / 2);
+  const outerRows = Math.ceil(n_nm / 2);
+  if (slotIdx === 1) return { column: "inner", row: 0, colRows: innerRows };
+  if (slotIdx === 2) return { column: "outer", row: 0, colRows: outerRows };
+  if (slotIdx % 2 === 1) return { column: "outer", row: (slotIdx - 1) / 2, colRows: outerRows };
+  return { column: "inner", row: slotIdx / 2 - 1, colRows: innerRows };
+}
+
+// Side-tile 1-column non-master mode: all non-masters stack vertically in
+// one "single" column. Slot k>=1 -> row k-1. n_nm < 2 has nothing to split.
+function sideTileSlotMeta1Col(slotIdx, n_nm) {
+  if (slotIdx === 0) return null;
+  if (n_nm < 2)      return null;
+  return { column: "single", row: slotIdx - 1, colRows: n_nm };
+}
+
 function outputId(out) {
   if (!out) return "null";
   return out.serialNumber || out.name || String(out);
@@ -377,7 +482,7 @@ function geometriesAutoGrid(n, area) {
 //   slot 5 → next left-column slot       (W6)
 //   slot 6 → next right-column slot      (W7)
 // Side columns grow top-down: 1 tile → split halves → split thirds.
-function geometriesCenterTile(n, area) {
+function geometriesCenterTile(n, area, queueKey) {
   const x = area.x, y = area.y, w = area.width, h = area.height;
   if (n <= 0) return [];
 
@@ -385,112 +490,45 @@ function geometriesCenterTile(n, area) {
   // rightTile N=1 behavior — "1 window = full".)
   if (n === 1) return [rect(x, y, w, h)];
 
-  // N=2: plain halves (intentional break from the center+side pattern).
+  // N=2: two windows share the work area using MasterWidth. Consistent with
+  // leftTile / rightTile N=2 — a single "master" boundary the user can drag.
   if (n === 2) {
-    const hw = Math.floor(w / 2);
+    const mw = Math.floor(CFG.masterWidth * w);
     return [
-      rect(x, y, hw, h),
-      rect(x + hw, y, w - hw, h),
+      rect(x, y, mw, h),
+      rect(x + mw, y, w - mw, h),
     ];
   }
 
-  // N>=3: sides derive as (1 - MasterWidth) / 2 each; center absorbs the
-  // rest (and any floor-rounding remainder). Master width is the unified
-  // tunable shared with leftTile / rightTile.
+  // N>=3: center master + left/right side columns. Master width from
+  // MasterWidth; sides derive as (1 - MasterWidth) / 2 each; center absorbs
+  // any floor-rounding remainder. Slot -> (column, row) via
+  // CENTER_TILE_ORDER; row heights per column come from rowSplits state
+  // (falls back to equal splits when the length doesn't match).
+  const nEff = Math.min(n, 9);
+  const order = CENTER_TILE_ORDER[nEff];
   const sideW = Math.floor(((1 - CFG.masterWidth) / 2) * w);
   const centerW = w - 2 * sideW;
   const leftX = x;
   const centerX = x + sideW;
   const rightX = x + sideW + centerW;
-  const center = rect(centerX, y, centerW, h);
 
-  if (n === 3) return [
-    center,
-    rect(leftX, y, sideW, h),                                    // left full
-    rect(rightX, y, sideW, h),                                    // right full
-  ];
+  const leftRows  = order.left.length;
+  const rightRows = order.right.length;
+  const leftRatios  = queueKey ? rowSplitFor(queueKey, "centerTile", "left",  leftRows)  : null;
+  const rightRatios = queueKey ? rowSplitFor(queueKey, "centerTile", "right", rightRows) : null;
+  const leftRects   = computeRowRects(h, leftRows,  leftRatios);
+  const rightRects  = computeRowRects(h, rightRows, rightRatios);
 
-  if (n === 4) {
-    const halfH = Math.floor(h / 2);
-    return [
-      center,
-      rect(leftX, y, sideW, halfH),                    // left-top  (W2)
-      rect(rightX, y, sideW, h),                        // right full (W3)
-      rect(leftX, y + halfH, sideW, h - halfH),                // left-bot  (W4)
-    ];
-  }
-
-  if (n === 5) {
-    const halfH = Math.floor(h / 2);
-    return [
-      center,
-      rect(leftX, y, sideW, halfH),                    // left-top  (W2)
-      rect(rightX, y, sideW, halfH),                    // right-top (W3)
-      rect(leftX, y + halfH, sideW, h - halfH),                // left-bot  (W4)
-      rect(rightX, y + halfH, sideW, h - halfH),                // right-bot (W5)
-    ];
-  }
-
-  if (n === 6) {
-    const thirdH = Math.floor(h / 3);
-    const halfH = Math.floor(h / 2);
-    return [
-      center,
-      rect(leftX, y, sideW, thirdH),             // left-top  (W2)
-      rect(rightX, y, sideW, halfH),              // right-top (W3)
-      rect(leftX, y + thirdH, sideW, thirdH),             // left-mid  (W4)
-      rect(rightX, y + halfH, sideW, h - halfH),          // right-bot (W5)
-      rect(leftX, y + 2 * thirdH, sideW, h - 2 * thirdH),     // left-bot  (W6)
-    ];
-  }
-
-  if (n === 7) {
-    // Both columns in thirds. Symmetric.
-    const thirdH = Math.floor(h / 3);
-    return [
-      center,
-      rect(leftX, y, sideW, thirdH),                                          // left-top  (W2)
-      rect(rightX, y, sideW, thirdH),                                         // right-top (W3)
-      rect(leftX, y + thirdH, sideW, thirdH),                                 // left-mid  (W4)
-      rect(rightX, y + thirdH, sideW, thirdH),                                // right-mid (W5)
-      rect(leftX, y + 2 * thirdH, sideW, h - 2 * thirdH),                     // left-bot  (W6)
-      rect(rightX, y + 2 * thirdH, sideW, h - 2 * thirdH),                    // right-bot (W7)
-    ];
-  }
-
-  if (n === 8) {
-    // 4 left (quarters) + 3 right (thirds). Asymmetric — continues the
-    // "left fills first when uneven" pattern from N=4 and N=6.
-    const quarterH = Math.floor(h / 4);
-    const lastQuarterH = h - 3 * quarterH;
-    const thirdH = Math.floor(h / 3);
-    const lastThirdH = h - 2 * thirdH;
-    return [
-      center,
-      rect(leftX, y, sideW, quarterH),                                        // left-1  (W2)
-      rect(rightX, y, sideW, thirdH),                                         // right-1 (W3)
-      rect(leftX, y + quarterH, sideW, quarterH),                             // left-2  (W4)
-      rect(rightX, y + thirdH, sideW, thirdH),                                // right-2 (W5)
-      rect(leftX, y + 2 * quarterH, sideW, quarterH),                         // left-3  (W6)
-      rect(rightX, y + 2 * thirdH, sideW, lastThirdH),                        // right-3 (W7)
-      rect(leftX, y + 3 * quarterH, sideW, lastQuarterH),                     // left-4  (W8)
-    ];
-  }
-
-  // n >= 9: both columns in quarters. Capped at 9 by CAP.
-  const quarterH = Math.floor(h / 4);
-  const lastQuarterH = h - 3 * quarterH;
-  return [
-    center,
-    rect(leftX, y, sideW, quarterH),                                          // left-1  (W2)
-    rect(rightX, y, sideW, quarterH),                                         // right-1 (W3)
-    rect(leftX, y + quarterH, sideW, quarterH),                               // left-2  (W4)
-    rect(rightX, y + quarterH, sideW, quarterH),                              // right-2 (W5)
-    rect(leftX, y + 2 * quarterH, sideW, quarterH),                           // left-3  (W6)
-    rect(rightX, y + 2 * quarterH, sideW, quarterH),                          // right-3 (W7)
-    rect(leftX, y + 3 * quarterH, sideW, lastQuarterH),                       // left-4  (W8)
-    rect(rightX, y + 3 * quarterH, sideW, lastQuarterH),                      // right-4 (W9)
-  ];
+  const tiles = new Array(nEff);
+  tiles[0] = rect(centerX, y, centerW, h);
+  order.left.forEach(function (slot, i) {
+    tiles[slot] = rect(leftX,  y + leftRects[i].y,  sideW, leftRects[i].h);
+  });
+  order.right.forEach(function (slot, i) {
+    tiles[slot] = rect(rightX, y + rightRects[i].y, sideW, rightRects[i].h);
+  });
+  return tiles;
 }
 
 // Monocle — one visible window at full work area. CAP=1 knocks out the rest;
@@ -529,11 +567,12 @@ function geometriesDual(n, area) {
 //
 // N=1 fills the full area (matches centerTile N=1 and the "1 window = full"
 // user spec). n_nm == 1 in 2-col mode collapses to one wide column.
-function geometriesSideTile(n, area, masterOnLeft) {
+function geometriesSideTile(n, area, masterOnLeft, queueKey) {
   if (n <= 0) return [];
   const x = area.x, y = area.y, w = area.width, h = area.height;
   if (n === 1) return [rect(x, y, w, h)];
 
+  const layout = masterOnLeft ? "leftTile" : "rightTile";
   const n_nm = n - 1;
   const masterW = Math.floor(CFG.masterWidth * w);
   const nmW = w - masterW;
@@ -544,52 +583,56 @@ function geometriesSideTile(n, area, masterOnLeft) {
   const nmCols = effectiveNonMasterColumns(area);
 
   // 1-column non-master area OR exactly 1 non-master: single wide vertical
-  // stack. Rows are equal-height; last absorbs floor-rounding remainder.
+  // stack. Row heights from rowSplits state ("single" column), else equal
+  // splits.
   if (nmCols === 1 || n_nm === 1) {
     if (n_nm === 1) return [master, rect(nmX, y, nmW, h)];
-    const rowH = Math.floor(h / n_nm);
+    const ratios = queueKey ? rowSplitFor(queueKey, layout, "single", n_nm) : null;
+    const rects = computeRowRects(h, n_nm, ratios);
     const tiles = [master];
     for (let i = 0; i < n_nm; i++) {
-      const yy = y + i * rowH;
-      const hh = (i === n_nm - 1) ? h - i * rowH : rowH;
-      tiles.push(rect(nmX, yy, nmW, hh));
+      tiles.push(rect(nmX, y + rects[i].y, nmW, rects[i].h));
     }
     return tiles;
   }
 
-  // 2-column non-master area with n_nm >= 2.
-  const colInnerW = Math.floor(nmW / 2);
-  const colOuterW = nmW - colInnerW;  // absorbs floor remainder
+  // 2-column non-master area with n_nm >= 2. Inner-column fraction of the
+  // non-master area comes from interColSplits state (default 0.5); the outer
+  // column absorbs any floor-rounding remainder.
+  const innerFrac = queueKey ? interColSplitFor(queueKey, layout) : 0.5;
+  const colInnerW = Math.floor(innerFrac * nmW);
+  const colOuterW = nmW - colInnerW;
   const colInnerX = masterOnLeft ? nmX             : nmX + colOuterW;
   const colOuterX = masterOnLeft ? nmX + colInnerW : nmX;
 
-  const colInnerRows = Math.floor(n_nm / 2);
-  const colOuterRows = Math.ceil(n_nm / 2);
-  const colInnerRowH = colInnerRows > 0 ? Math.floor(h / colInnerRows) : h;
-  const colOuterRowH = colOuterRows > 0 ? Math.floor(h / colOuterRows) : h;
+  const innerRows = Math.floor(n_nm / 2);
+  const outerRows = Math.ceil(n_nm / 2);
+  const innerRatios = queueKey ? rowSplitFor(queueKey, layout, "inner", innerRows) : null;
+  const outerRatios = queueKey ? rowSplitFor(queueKey, layout, "outer", outerRows) : null;
+  const innerRects = computeRowRects(h, innerRows, innerRatios);
+  const outerRects = computeRowRects(h, outerRows, outerRatios);
 
-  function cellRect(colX, colW, row, rowsInCol, rowH) {
-    const yy = y + (row - 1) * rowH;
-    const hh = (row === rowsInCol) ? h - (rowsInCol - 1) * rowH : rowH;
-    return rect(colX, yy, colW, hh);
+  function cellRect(colX, colW, rects, rowIdx) {
+    return rect(colX, y + rects[rowIdx].y, colW, rects[rowIdx].h);
   }
 
   const tiles = [master];
-  tiles.push(cellRect(colInnerX, colInnerW, 1, colInnerRows, colInnerRowH));  // non_master[1]
-  tiles.push(cellRect(colOuterX, colOuterW, 1, colOuterRows, colOuterRowH));  // non_master[2]
+  // non_master[1] -> col_inner row 0, non_master[2] -> col_outer row 0
+  tiles.push(cellRect(colInnerX, colInnerW, innerRects, 0));
+  tiles.push(cellRect(colOuterX, colOuterW, outerRects, 0));
 
   for (let k = 3; k <= n_nm; k++) {
     if (k % 2 === 1) {
-      tiles.push(cellRect(colOuterX, colOuterW, Math.ceil(k / 2), colOuterRows, colOuterRowH));
+      tiles.push(cellRect(colOuterX, colOuterW, outerRects, (k - 1) / 2));
     } else {
-      tiles.push(cellRect(colInnerX, colInnerW, k / 2, colInnerRows, colInnerRowH));
+      tiles.push(cellRect(colInnerX, colInnerW, innerRects, k / 2 - 1));
     }
   }
   return tiles;
 }
 
-function geometriesLeftTile(n, area)  { return geometriesSideTile(n, area, true); }
-function geometriesRightTile(n, area) { return geometriesSideTile(n, area, false); }
+function geometriesLeftTile(n, area, key)  { return geometriesSideTile(n, area, true,  key); }
+function geometriesRightTile(n, area, key) { return geometriesSideTile(n, area, false, key); }
 
 const LAYOUTS = {
   autoGrid:   geometriesAutoGrid,
@@ -601,7 +644,7 @@ const LAYOUTS = {
 };
 
 function geometries(key, n, area) {
-  return LAYOUTS[layoutFor(key)](n, area);
+  return LAYOUTS[layoutFor(key)](n, area, key);
 }
 
 // Apply user-configured gaps as a post-processing pass on layout rects.
@@ -959,69 +1002,232 @@ function captureResizeCtx(w) {
   const split = Math.max(0, found.q.length - cap);
   const slotIdx = found.idx - split;
   if (slotIdx < 0) return null;
+  const fg = w.frameGeometry;
   return {
     layout: layoutFor(found.key),
     key: found.key,
     slotIdx: slotIdx,
     area: workArea(w.output, desk),
     n: Math.min(found.q.length, cap),
+    // Drag-start geometry snapshot so handleResize can detect which edge
+    // moved (top vs bottom for vertical drags) and compute delta ratios
+    // against a stable baseline instead of reconstructing from CFG.
+    startFg: { x: fg.x, y: fg.y, width: fg.width, height: fg.height },
   };
 }
 
-// Translate a finished interactive resize into a MasterWidth adjustment.
-// Returns true when the tunable was updated and retileKey scheduled; false
-// when the slot has no adjustable boundary (caller falls back to snap-
-// back). autoGrid is fully derived, monocle fills the work area, dual is
-// plain 50/50, centerTile N<=2 has no MasterWidth-adjustable boundary.
+// Translate a finished interactive resize into tunable + row-split updates.
+// Returns true when at least one update landed and retileKey was scheduled;
+// false when nothing changed (caller falls back to snap-back).
 //
-// From the resized tile's new width, back-solve MasterWidth:
-//   centerTile N>=3: master = w/aw; side = (1-master)/2 -> master = 1-2*(w/aw)
-//   leftTile/rightTile: master = w/aw when isMaster
-//     non-master: 1-col mode or n_nm=1 -> non_master_frac = 1-master
-//                 2-col mode           -> each col = (1-master)/2
+// Width delta -> tryUpdateMasterWidth (existing back-solve for MasterWidth).
+// Height delta -> tryUpdateRowSplit (adjust row-height ratios in the slot's
+// column). Both can fire in the same drag if the user resized diagonally.
 //
 // Writes are IN-MEMORY: KWin's script API exposes readConfig but not
-// writeConfig, so the new value survives until the next script reload
-// (login, KCM save, dev cycle). Persistence via kwriteconfig6-through-
-// callDBus is a follow-up — same write-path problem as the 0.8.0 anchor.
+// writeConfig, so new values survive until the next script reload (login,
+// KCM save, dev cycle). Persistence via kwriteconfig6-through-callDBus is
+// a follow-up — same write-path problem as the 0.8.0 anchor.
 function handleResize(w, ctx) {
   const fg = w.frameGeometry;
-  const aw = ctx.area.width;
+  const startFg = ctx.startFg;
+
+  // Skip drags that didn't materially move either dimension (< 2 px).
+  const widthChanged  = Math.abs(fg.width  - startFg.width)  > 2;
+  const heightChanged = Math.abs(fg.height - startFg.height) > 2;
+  if (!widthChanged && !heightChanged) return false;
+
+  let updated = false;
+  if (widthChanged) {
+    updated = tryUpdateMasterWidth(ctx, fg)    || updated;
+    updated = tryUpdateInterColSplit(ctx, fg)  || updated;
+  }
+  if (heightChanged) updated = tryUpdateRowSplit(ctx, fg) || updated;
+
+  if (updated) retileKey(ctx.key);
+  return updated;
+}
+
+// Back-solve CFG.masterWidth from the resized tile's new geometry — but only
+// when the drag actually moved the master boundary. Each slot has a known
+// "master-side edge" (the edge that borders the master column); if a
+// different edge moved, MasterWidth stays put. Outer col in leftTile /
+// rightTile 2-col mode has no master-side edge at all and always skips.
+//
+// For leftTile / rightTile 2-col inner col, we back-solve from the tile's
+// LEFT-EDGE POSITION (leftTile) or RIGHT-EDGE POSITION (rightTile) so the
+// formula is independent of the current inter-column split. Other slots use
+// the width formula since sides are symmetric there.
+function tryUpdateMasterWidth(ctx, fg) {
   const layout = ctx.layout;
   const isMaster = ctx.slotIdx === 0;
+  const aw = ctx.area.width;
+  const ax = ctx.area.x;
+  const startFg = ctx.startFg;
 
-  // N=1 fills the area in every layout; nothing to move.
   if (ctx.n === 1) return false;
-  // Layouts without an adjustable boundary at all.
   if (layout === "monocle" || layout === "dual" || layout === "autoGrid") return false;
-  // centerTile N=2 is plain halves — no MasterWidth applies.
-  if (layout === "centerTile" && ctx.n === 2) return false;
 
+  const leftEdgeMoved  = Math.abs(fg.x - startFg.x) > 2;
+  const rightEdgeMoved = Math.abs((fg.x + fg.width) - (startFg.x + startFg.width)) > 2;
+
+  let masterEdgeMoved;
   let masterFrac;
   if (layout === "centerTile") {
-    masterFrac = isMaster ? fg.width / aw
-                          : 1 - 2 * (fg.width / aw);
-  } else if (layout === "leftTile" || layout === "rightTile") {
     if (isMaster) {
+      // N=2 master has no left neighbor (area boundary); only RIGHT edge
+      // borders non-master. N>=3 has both sides.
+      masterEdgeMoved = ctx.n === 2 ? rightEdgeMoved : (leftEdgeMoved || rightEdgeMoved);
+      masterFrac = fg.width / aw;
+    } else if (ctx.n === 2) {
+      // Slot 1 at N=2 is the right half; LEFT edge borders master.
+      masterEdgeMoved = leftEdgeMoved;
+      masterFrac = 1 - fg.width / aw;
+    } else {
+      const meta = centerTileSlotMeta(ctx.slotIdx, ctx.n);
+      if (!meta) return false;
+      masterEdgeMoved = meta.column === "left" ? rightEdgeMoved : leftEdgeMoved;
+      masterFrac = 1 - 2 * (fg.width / aw);
+    }
+  } else if (layout === "leftTile" || layout === "rightTile") {
+    const masterOnLeft = layout === "leftTile";
+    if (isMaster) {
+      masterEdgeMoved = masterOnLeft ? rightEdgeMoved : leftEdgeMoved;
       masterFrac = fg.width / aw;
     } else {
       const nmCols = effectiveNonMasterColumns(ctx.area);
-      // Single wide non-master column (1-col mode, or only one non-master).
-      if (nmCols === 1 || ctx.n === 2) {
+      const singleWide = (nmCols === 1 || ctx.n === 2);
+      if (singleWide) {
+        masterEdgeMoved = masterOnLeft ? leftEdgeMoved : rightEdgeMoved;
         masterFrac = 1 - fg.width / aw;
       } else {
-        // 2 non-master columns: each = (1-master)/2 -> master = 1 - 2*col
-        masterFrac = 1 - 2 * (fg.width / aw);
+        const meta = sideTileSlotMeta2Col(ctx.slotIdx, ctx.n - 1);
+        if (!meta || meta.column !== "inner") return false;
+        // Edge-position back-solve — independent of the current inter-column
+        // split. leftTile inner LEFT edge is master boundary; rightTile inner
+        // RIGHT edge is master boundary.
+        if (masterOnLeft) {
+          masterEdgeMoved = leftEdgeMoved;
+          masterFrac = (fg.x - ax) / aw;
+        } else {
+          masterEdgeMoved = rightEdgeMoved;
+          masterFrac = (ax + aw - (fg.x + fg.width)) / aw;
+        }
       }
     }
   } else {
     return false;
   }
 
+  if (!masterEdgeMoved) return false;
+
   const clamped = clamp(masterFrac, 0.15, 0.85);
+  if (Math.abs(clamped - CFG.masterWidth) < 0.005) return false;
   CFG.masterWidth = clamped;
   log("masterWidth = " + clamped.toFixed(3) + " (in-memory)");
-  retileKey(ctx.key);
+  return true;
+}
+
+// Update per-column row-split ratios from the resized tile's new height.
+// Only fires for tiles with a vertical neighbor in their column that can
+// absorb the delta. Which neighbor: detect from which edge moved (top y or
+// bottom y+h). Rejects updates that would push either row below a 5%
+// minimum. Skips when the slot is master or its column has only one row.
+function tryUpdateRowSplit(ctx, fg) {
+  const layout = ctx.layout;
+  if (ctx.slotIdx === 0) return false;
+
+  let meta;
+  if (layout === "centerTile") {
+    meta = centerTileSlotMeta(ctx.slotIdx, ctx.n);
+  } else if (layout === "leftTile" || layout === "rightTile") {
+    const n_nm = ctx.n - 1;
+    const nmCols = effectiveNonMasterColumns(ctx.area);
+    meta = (nmCols === 1 || n_nm === 1)
+      ? sideTileSlotMeta1Col(ctx.slotIdx, n_nm)
+      : sideTileSlotMeta2Col(ctx.slotIdx, n_nm);
+  } else {
+    return false;
+  }
+  if (!meta || meta.colRows < 2) return false;
+
+  const startFg = ctx.startFg;
+  const topEdgeMoved = Math.abs(fg.y - startFg.y) > 2;
+  const botEdgeMoved = Math.abs((fg.y + fg.height) - (startFg.y + startFg.height)) > 2;
+
+  let neighborRow;
+  if (topEdgeMoved && meta.row > 0) {
+    neighborRow = meta.row - 1;
+  } else if (botEdgeMoved && meta.row < meta.colRows - 1) {
+    neighborRow = meta.row + 1;
+  } else {
+    return false;
+  }
+
+  const totalH = ctx.area.height;
+  const deltaRatio = (fg.height - startFg.height) / totalH;
+  const currentRatios = rowSplitFor(ctx.key, layout, meta.column, meta.colRows);
+  const ratios = currentRatios ? currentRatios.slice()
+                               : Array.from({length: meta.colRows}, function () { return 1 / meta.colRows; });
+
+  const newDragged  = ratios[meta.row]    + deltaRatio;
+  const newNeighbor = ratios[neighborRow] - deltaRatio;
+  const MIN = 0.05;
+  if (newDragged < MIN || newNeighbor < MIN) return false;
+
+  ratios[meta.row]    = newDragged;
+  ratios[neighborRow] = newNeighbor;
+  rowSplits.set(rowSplitKey(ctx.key, layout, meta.column), ratios);
+  log("rowSplit[" + layout + "|" + meta.column + "] row " + meta.row + " → " + newDragged.toFixed(3) + " (in-memory)");
+  return true;
+}
+
+// Update the inner-vs-outer column split when the user drags the boundary
+// between the two non-master columns in leftTile / rightTile 2-col mode.
+// Skips when the drag was on a different edge (master boundary is handled
+// by tryUpdateMasterWidth; horizontal edges by tryUpdateRowSplit). Clamps
+// the new inner fraction to [0.1, 0.9] to avoid collapsing either column.
+function tryUpdateInterColSplit(ctx, fg) {
+  const layout = ctx.layout;
+  if (layout !== "leftTile" && layout !== "rightTile") return false;
+  if (ctx.slotIdx === 0) return false;
+  const n_nm = ctx.n - 1;
+  const nmCols = effectiveNonMasterColumns(ctx.area);
+  if (nmCols !== 2 || n_nm < 2) return false;
+
+  const meta = sideTileSlotMeta2Col(ctx.slotIdx, n_nm);
+  if (!meta) return false;
+
+  const startFg = ctx.startFg;
+  const leftEdgeMoved  = Math.abs(fg.x - startFg.x) > 2;
+  const rightEdgeMoved = Math.abs((fg.x + fg.width) - (startFg.x + startFg.width)) > 2;
+
+  // Which edge of this slot is the inter-column boundary?
+  //   leftTile inner  -> RIGHT ;  leftTile outer  -> LEFT
+  //   rightTile inner -> LEFT  ;  rightTile outer -> RIGHT
+  const masterOnLeft = layout === "leftTile";
+  let interColEdgeMoved;
+  if (meta.column === "inner") {
+    interColEdgeMoved = masterOnLeft ? rightEdgeMoved : leftEdgeMoved;
+  } else {
+    interColEdgeMoved = masterOnLeft ? leftEdgeMoved  : rightEdgeMoved;
+  }
+  if (!interColEdgeMoved) return false;
+
+  // Only the inter-column boundary moved: the dragged tile's width IS its
+  // column's new width (the OTHER edge stayed put). Back-solve inner
+  // fraction of non-master area.
+  const nmW = (1 - CFG.masterWidth) * ctx.area.width;
+  if (nmW <= 0) return false;
+  const colFrac = fg.width / nmW;
+  const newInnerFrac = meta.column === "inner" ? colFrac : 1 - colFrac;
+
+  const MIN = 0.1;
+  const clamped = clamp(newInnerFrac, MIN, 1 - MIN);
+  const cur = interColSplitFor(ctx.key, layout);
+  if (Math.abs(clamped - cur) < 0.005) return false;
+  interColSplits.set(interColSplitKey(ctx.key, layout), clamped);
+  log("interColSplit[" + layout + "] = " + clamped.toFixed(3) + " (in-memory)");
   return true;
 }
 
