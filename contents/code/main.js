@@ -157,6 +157,20 @@ const pins = new Map();
 //   leftTile / rightTile 1-col:  "single"
 const rowSplits = new Map();
 
+// Map<string, number>: key = `${queueKey}|${layout}` (layout in {leftTile,
+// rightTile}), value = inner-column fraction of the non-master area in 2-col
+// mode. Default 0.5 (equal halves). Session-only.
+const interColSplits = new Map();
+
+function interColSplitKey(queueKey, layout) {
+  return queueKey + "|" + layout;
+}
+
+function interColSplitFor(queueKey, layout) {
+  const v = interColSplits.get(interColSplitKey(queueKey, layout));
+  return typeof v === "number" ? v : 0.5;
+}
+
 function rowSplitKey(queueKey, layout, column) {
   return queueKey + "|" + layout + "|" + column;
 }
@@ -476,12 +490,13 @@ function geometriesCenterTile(n, area, queueKey) {
   // rightTile N=1 behavior — "1 window = full".)
   if (n === 1) return [rect(x, y, w, h)];
 
-  // N=2: plain halves (intentional break from the center+side pattern).
+  // N=2: two windows share the work area using MasterWidth. Consistent with
+  // leftTile / rightTile N=2 — a single "master" boundary the user can drag.
   if (n === 2) {
-    const hw = Math.floor(w / 2);
+    const mw = Math.floor(CFG.masterWidth * w);
     return [
-      rect(x, y, hw, h),
-      rect(x + hw, y, w - hw, h),
+      rect(x, y, mw, h),
+      rect(x + mw, y, w - mw, h),
     ];
   }
 
@@ -581,9 +596,12 @@ function geometriesSideTile(n, area, masterOnLeft, queueKey) {
     return tiles;
   }
 
-  // 2-column non-master area with n_nm >= 2.
-  const colInnerW = Math.floor(nmW / 2);
-  const colOuterW = nmW - colInnerW;  // absorbs floor remainder
+  // 2-column non-master area with n_nm >= 2. Inner-column fraction of the
+  // non-master area comes from interColSplits state (default 0.5); the outer
+  // column absorbs any floor-rounding remainder.
+  const innerFrac = queueKey ? interColSplitFor(queueKey, layout) : 0.5;
+  const colInnerW = Math.floor(innerFrac * nmW);
+  const colOuterW = nmW - colInnerW;
   const colInnerX = masterOnLeft ? nmX             : nmX + colOuterW;
   const colOuterX = masterOnLeft ? nmX + colInnerW : nmX;
 
@@ -1020,50 +1038,51 @@ function handleResize(w, ctx) {
   if (!widthChanged && !heightChanged) return false;
 
   let updated = false;
-  if (widthChanged)  updated = tryUpdateMasterWidth(ctx, fg) || updated;
-  if (heightChanged) updated = tryUpdateRowSplit(ctx, fg)    || updated;
+  if (widthChanged) {
+    updated = tryUpdateMasterWidth(ctx, fg)    || updated;
+    updated = tryUpdateInterColSplit(ctx, fg)  || updated;
+  }
+  if (heightChanged) updated = tryUpdateRowSplit(ctx, fg) || updated;
 
   if (updated) retileKey(ctx.key);
   return updated;
 }
 
-// Back-solve CFG.masterWidth from the resized tile's new width — but ONLY
+// Back-solve CFG.masterWidth from the resized tile's new geometry — but only
 // when the drag actually moved the master boundary. Each slot has a known
 // "master-side edge" (the edge that borders the master column); if a
-// different edge moved, the drag was between two non-master columns and
-// MasterWidth should not change. Slots with no master-side edge at all
-// (outer column in leftTile/rightTile 2-col mode) always skip.
+// different edge moved, MasterWidth stays put. Outer col in leftTile /
+// rightTile 2-col mode has no master-side edge at all and always skips.
 //
-// Boundary math per slot (once we've confirmed the right edge moved):
-//   centerTile N>=3 master (slot 0):     master = fg.width / aw
-//   centerTile N>=3 side slots:          side = fg.width / aw ; master = 1 - 2*side
-//   leftTile/rightTile master (slot 0):  master = fg.width / aw
-//   leftTile/rightTile inner (1-col or n_nm=1 wide, or 2-col inner):
-//                                        non-master area = fg.width / aw
-//     -> 1-col wide: master = 1 - non_master_frac
-//     -> 2-col inner: master = 1 - 2*col_frac
+// For leftTile / rightTile 2-col inner col, we back-solve from the tile's
+// LEFT-EDGE POSITION (leftTile) or RIGHT-EDGE POSITION (rightTile) so the
+// formula is independent of the current inter-column split. Other slots use
+// the width formula since sides are symmetric there.
 function tryUpdateMasterWidth(ctx, fg) {
   const layout = ctx.layout;
   const isMaster = ctx.slotIdx === 0;
   const aw = ctx.area.width;
+  const ax = ctx.area.x;
   const startFg = ctx.startFg;
 
   if (ctx.n === 1) return false;
   if (layout === "monocle" || layout === "dual" || layout === "autoGrid") return false;
-  if (layout === "centerTile" && ctx.n === 2) return false;
 
   const leftEdgeMoved  = Math.abs(fg.x - startFg.x) > 2;
   const rightEdgeMoved = Math.abs((fg.x + fg.width) - (startFg.x + startFg.width)) > 2;
 
-  // Which edge of THIS slot is the master boundary? Master boundary must
-  // have moved for a MasterWidth update to be meaningful.
   let masterEdgeMoved;
   let masterFrac;
   if (layout === "centerTile") {
     if (isMaster) {
-      // Center master borders left-side on the left, right-side on the right.
-      masterEdgeMoved = leftEdgeMoved || rightEdgeMoved;
+      // N=2 master has no left neighbor (area boundary); only RIGHT edge
+      // borders non-master. N>=3 has both sides.
+      masterEdgeMoved = ctx.n === 2 ? rightEdgeMoved : (leftEdgeMoved || rightEdgeMoved);
       masterFrac = fg.width / aw;
+    } else if (ctx.n === 2) {
+      // Slot 1 at N=2 is the right half; LEFT edge borders master.
+      masterEdgeMoved = leftEdgeMoved;
+      masterFrac = 1 - fg.width / aw;
     } else {
       const meta = centerTileSlotMeta(ctx.slotIdx, ctx.n);
       if (!meta) return false;
@@ -1073,23 +1092,27 @@ function tryUpdateMasterWidth(ctx, fg) {
   } else if (layout === "leftTile" || layout === "rightTile") {
     const masterOnLeft = layout === "leftTile";
     if (isMaster) {
-      // leftTile master: master boundary is the RIGHT edge.
-      // rightTile master: master boundary is the LEFT edge.
       masterEdgeMoved = masterOnLeft ? rightEdgeMoved : leftEdgeMoved;
       masterFrac = fg.width / aw;
     } else {
       const nmCols = effectiveNonMasterColumns(ctx.area);
       const singleWide = (nmCols === 1 || ctx.n === 2);
       if (singleWide) {
-        // Sole non-master fills the whole non-master area. Master boundary
-        // is the edge closest to master.
         masterEdgeMoved = masterOnLeft ? leftEdgeMoved : rightEdgeMoved;
         masterFrac = 1 - fg.width / aw;
       } else {
         const meta = sideTileSlotMeta2Col(ctx.slotIdx, ctx.n - 1);
-        if (!meta || meta.column !== "inner") return false;  // outer col doesn't touch master
-        masterEdgeMoved = masterOnLeft ? leftEdgeMoved : rightEdgeMoved;
-        masterFrac = 1 - 2 * (fg.width / aw);
+        if (!meta || meta.column !== "inner") return false;
+        // Edge-position back-solve — independent of the current inter-column
+        // split. leftTile inner LEFT edge is master boundary; rightTile inner
+        // RIGHT edge is master boundary.
+        if (masterOnLeft) {
+          masterEdgeMoved = leftEdgeMoved;
+          masterFrac = (fg.x - ax) / aw;
+        } else {
+          masterEdgeMoved = rightEdgeMoved;
+          masterFrac = (ax + aw - (fg.x + fg.width)) / aw;
+        }
       }
     }
   } else {
@@ -1156,6 +1179,55 @@ function tryUpdateRowSplit(ctx, fg) {
   ratios[neighborRow] = newNeighbor;
   rowSplits.set(rowSplitKey(ctx.key, layout, meta.column), ratios);
   log("rowSplit[" + layout + "|" + meta.column + "] row " + meta.row + " → " + newDragged.toFixed(3) + " (in-memory)");
+  return true;
+}
+
+// Update the inner-vs-outer column split when the user drags the boundary
+// between the two non-master columns in leftTile / rightTile 2-col mode.
+// Skips when the drag was on a different edge (master boundary is handled
+// by tryUpdateMasterWidth; horizontal edges by tryUpdateRowSplit). Clamps
+// the new inner fraction to [0.1, 0.9] to avoid collapsing either column.
+function tryUpdateInterColSplit(ctx, fg) {
+  const layout = ctx.layout;
+  if (layout !== "leftTile" && layout !== "rightTile") return false;
+  if (ctx.slotIdx === 0) return false;
+  const n_nm = ctx.n - 1;
+  const nmCols = effectiveNonMasterColumns(ctx.area);
+  if (nmCols !== 2 || n_nm < 2) return false;
+
+  const meta = sideTileSlotMeta2Col(ctx.slotIdx, n_nm);
+  if (!meta) return false;
+
+  const startFg = ctx.startFg;
+  const leftEdgeMoved  = Math.abs(fg.x - startFg.x) > 2;
+  const rightEdgeMoved = Math.abs((fg.x + fg.width) - (startFg.x + startFg.width)) > 2;
+
+  // Which edge of this slot is the inter-column boundary?
+  //   leftTile inner  -> RIGHT ;  leftTile outer  -> LEFT
+  //   rightTile inner -> LEFT  ;  rightTile outer -> RIGHT
+  const masterOnLeft = layout === "leftTile";
+  let interColEdgeMoved;
+  if (meta.column === "inner") {
+    interColEdgeMoved = masterOnLeft ? rightEdgeMoved : leftEdgeMoved;
+  } else {
+    interColEdgeMoved = masterOnLeft ? leftEdgeMoved  : rightEdgeMoved;
+  }
+  if (!interColEdgeMoved) return false;
+
+  // Only the inter-column boundary moved: the dragged tile's width IS its
+  // column's new width (the OTHER edge stayed put). Back-solve inner
+  // fraction of non-master area.
+  const nmW = (1 - CFG.masterWidth) * ctx.area.width;
+  if (nmW <= 0) return false;
+  const colFrac = fg.width / nmW;
+  const newInnerFrac = meta.column === "inner" ? colFrac : 1 - colFrac;
+
+  const MIN = 0.1;
+  const clamped = clamp(newInnerFrac, MIN, 1 - MIN);
+  const cur = interColSplitFor(ctx.key, layout);
+  if (Math.abs(clamped - cur) < 0.005) return false;
+  interColSplits.set(interColSplitKey(ctx.key, layout), clamped);
+  log("interColSplit[" + layout + "] = " + clamped.toFixed(3) + " (in-memory)");
   return true;
 }
 
