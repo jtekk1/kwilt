@@ -41,11 +41,16 @@ function clamp(value, min, max) {
 // then reload the script (./dev-reload.sh or relogin). Defaults match the
 // hardcoded values that were here before this commit, so an unconfigured
 // kwinrc is a no-op.
-const VALID_LAYOUTS = ["autoGrid", "centerTile", "monocle", "dual", "leftTile", "rightTile", "floating"];
+// The known layout names, listed here rather than derived from `LAYOUTS`
+// because `LAYOUTS` is declared much later (it references the geometry
+// functions, which depend on CFG). CFG-build-time and hydrate-time both
+// need name validation before `LAYOUTS` exists; a runtime drift-check
+// right after `LAYOUTS` is defined catches divergence.
+const LAYOUT_NAMES = ["autoGrid", "centerTile", "monocle", "dual", "leftTile", "rightTile", "floating"];
 
 const CFG = (function () {
   const layoutRaw = cfg("Layout", "centerTile");
-  const layout = VALID_LAYOUTS.indexOf(layoutRaw) !== -1 ? layoutRaw : "centerTile";
+  const layout = LAYOUT_NAMES.indexOf(layoutRaw) !== -1 ? layoutRaw : "centerTile";
   const alwaysFloatRaw = cfg("AlwaysFloat", "");
   const alwaysFloat = String(alwaysFloatRaw)
     .split(",")
@@ -114,40 +119,21 @@ function readJsonMap(key) {
 // kwinrc-tunable global default). setLayoutFor / cycleLayout mutate a
 // single key; new (output, desktop) combos inherit CFG.layout on first
 // read via layoutFor.
-//
-// CAPS is a lookup table by layout name. monocle and dual are fixed-cap
-// layouts — their cap defines the layout (1 visible / 2 visible) and
-// isn't configurable. capFor(key) resolves the cap for whatever layout is
-// active on that key.
 const layouts = new Map();
-const CAPS = {
-  autoGrid:   CFG.capAutoGrid,
-  centerTile: CFG.capCenterTile,
-  monocle:    1,
-  dual:       2,
-  leftTile:   CFG.capLeftTile,
-  rightTile:  CFG.capRightTile,
-  // floating never tiles anything — isTileable short-circuits, the queue
-  // stays empty, so cap is never resolved. The 0 is bookkeeping.
-  floating:   0,
-};
 
 function layoutFor(key) { return layouts.get(key) || CFG.layout; }
 
-// Resolve the visible cap for a key's active layout. 0 in the CFG means
-// "unlimited": leftTile/rightTile scale to arbitrary N via row splits, so
-// they get MAX_SAFE_INTEGER (effectively no cap). autoGrid and centerTile
-// have hardcoded geometry ranges — falling back to their natural max is
-// the least-surprising translation of "unlimited" for them. A one-shot
-// warning at init tells the user which fallback applied.
+// Resolve the visible cap for a key's active layout via the LAYOUTS registry:
+// `entry.cap` is the primary source (either a fixed value like monocle=1 or a
+// CFG-tunable like `CFG.capAutoGrid`). A cap of 0 means "unlimited"; for
+// layouts with hardcoded geometry ranges (`entry.maxN` set), the fallback is
+// that natural max (less surprising than MAX_SAFE_INTEGER for those); for
+// scale-freely layouts (`maxN === null`), unlimited is MAX_SAFE_INTEGER.
+// LAYOUTS is declared below, after the geometry functions it references.
 function capFor(key) {
-  const layout = layoutFor(key);
-  const raw = CAPS[layout];
-  if (raw > 0) return raw;
-  if (layout === "leftTile" || layout === "rightTile") return Number.MAX_SAFE_INTEGER;
-  if (layout === "autoGrid")   return 12;
-  if (layout === "centerTile") return 9;
-  return raw;
+  const entry = LAYOUTS[layoutFor(key)];
+  if (entry.cap > 0) return entry.cap;
+  return entry.maxN === null ? Number.MAX_SAFE_INTEGER : entry.maxN;
 }
 
 // Split index for a queue on `key` — everything before is knocked-out, from
@@ -264,7 +250,7 @@ function saveInterColSplitsAll() {
 
 // Hydrate session Maps from persisted state written by prior sessions via the
 // KwiltConfigWriter helper. Runs at script load, before init() retiles.
-// PerKeyLayoutsJson entries are validated against VALID_LAYOUTS so a stale
+// PerKeyLayoutsJson entries are validated against LAYOUT_NAMES so a stale
 // or renamed layout doesn't strand a queue on an unknown mode.
 (function hydrate() {
   function hydrateInto(configKey, target, ok) {
@@ -273,7 +259,7 @@ function saveInterColSplitsAll() {
     return parsed.size;
   }
   const nL = hydrateInto("PerKeyLayoutsJson", layouts,
-                         function (v) { return typeof v === "string" && VALID_LAYOUTS.indexOf(v) !== -1; });
+                         function (v) { return typeof v === "string" && LAYOUT_NAMES.indexOf(v) !== -1; });
   const nR = hydrateInto("RowSplitsJson", rowSplits, Array.isArray);
   const nI = hydrateInto("InterColSplitsJson", interColSplits,
                          function (v) { return typeof v === "number"; });
@@ -395,11 +381,11 @@ function isTileable(w) {
       if (rc.indexOf(pat) !== -1 || rn.indexOf(pat) !== -1) return false;
     }
   }
-  // Per-key floating: if this window's (output, virtualDesktop) is set to the
-  // "floating" layout, nothing on that key tiles. Deferred to the end so all
-  // other rejections still apply (dialogs, popups, fullscreen, etc. stay
-  // non-tileable regardless of the key's layout).
-  if (layoutFor(keyFor(w.output, singleDesktop(w))) === "floating") return false;
+  // Per-key layout opt-out: layouts with `tiles: false` in the registry
+  // (`floating` today) never track windows on their key. Deferred to the end
+  // so intrinsic rejections (dialogs, popups, fullscreen, etc.) still apply
+  // regardless of the key's layout.
+  if (!LAYOUTS[layoutFor(keyFor(w.output, singleDesktop(w)))].tiles) return false;
   return true;
 }
 
@@ -759,18 +745,50 @@ function geometriesRightTile(n, area, key) { return geometriesSideTile(n, area, 
 // in setLayoutFor and cycleLayout's key iteration.
 function geometriesFloating() { return []; }
 
-const LAYOUTS = {
-  autoGrid:   geometriesAutoGrid,
-  centerTile: geometriesCenterTile,
-  monocle:    geometriesMonocle,
-  dual:       geometriesDual,
-  leftTile:   geometriesLeftTile,
-  rightTile:  geometriesRightTile,
-  floating:   geometriesFloating,
+// Layout registry — one entry per layout, one place to change when adding a
+// new one. Fields:
+//   geometries — function(n, area, key) → array of {x,y,width,height} rects.
+//   cap        — visible cap; 0 = unlimited. Fixed for layouts where the cap
+//                IS the layout's defining property (monocle=1, dual=2);
+//                CFG-tunable for the others.
+//   maxN       — natural upper bound when cap===0. A finite value means the
+//                geometry function only handles N=1..maxN, so capFor falls
+//                back to it (autoGrid: 12, centerTile: 9). null means the
+//                layout scales freely and unlimited === MAX_SAFE_INTEGER.
+//   tiles      — false for the escape-hatch `floating` layout. isTileable
+//                short-circuits when the (output, virtualDesktop)'s layout
+//                has tiles === false.
+//   shortcut   — direct-set key sequence (e.g. `Meta+Ctrl+G`) or null.
+//   shortcutId — kglobalaccel action ID for the direct-set shortcut. Frozen
+//                per-layout for shortcut persistence; user re-binds in KDE
+//                Shortcuts settings if defaults collide.
+//
+// Declared with `var` (not `const`) so QJSEngine's static-TDZ analysis
+// doesn't complain about capFor / isTileable / setLayoutFor referencing
+// LAYOUTS from bodies declared earlier in the file. Those references are
+// only hit at call time — long after this const-in-var-clothing is
+// initialized — but const-in-TDZ triggers a warning per hit at reload.
+var LAYOUTS = {
+  autoGrid:   { geometries: geometriesAutoGrid,   cap: CFG.capAutoGrid,   maxN: 12,   tiles: true,  shortcut: "Meta+Ctrl+G", shortcutId: "KwiltLayoutGrid"     },
+  centerTile: { geometries: geometriesCenterTile, cap: CFG.capCenterTile, maxN: 9,    tiles: true,  shortcut: "Meta+Ctrl+C", shortcutId: "KwiltLayoutCenter"   },
+  monocle:    { geometries: geometriesMonocle,    cap: 1,                 maxN: null, tiles: true,  shortcut: "Meta+Ctrl+M", shortcutId: "KwiltLayoutMonocle"  },
+  dual:       { geometries: geometriesDual,       cap: 2,                 maxN: null, tiles: true,  shortcut: "Meta+Ctrl+D", shortcutId: "KwiltLayoutDual"     },
+  leftTile:   { geometries: geometriesLeftTile,   cap: CFG.capLeftTile,   maxN: null, tiles: true,  shortcut: "Meta+Ctrl+L", shortcutId: "KwiltLayoutLeft"     },
+  rightTile:  { geometries: geometriesRightTile,  cap: CFG.capRightTile,  maxN: null, tiles: true,  shortcut: "Meta+Ctrl+T", shortcutId: "KwiltLayoutRight"    },
+  floating:   { geometries: geometriesFloating,   cap: 0,                 maxN: null, tiles: false, shortcut: "Meta+Ctrl+F", shortcutId: "KwiltLayoutFloating" },
 };
 
+// Drift check: LAYOUT_NAMES is used by the CFG/hydrate early validation and
+// LAYOUTS is used by everything else. They must agree.
+LAYOUT_NAMES.forEach(function (n) {
+  if (!LAYOUTS[n]) throw new Error("LAYOUT_NAMES has '" + n + "' but LAYOUTS does not");
+});
+Object.keys(LAYOUTS).forEach(function (n) {
+  if (LAYOUT_NAMES.indexOf(n) === -1) throw new Error("LAYOUTS has '" + n + "' but LAYOUT_NAMES does not");
+});
+
 function geometries(key, n, area) {
-  return LAYOUTS[layoutFor(key)](n, area, key);
+  return LAYOUTS[layoutFor(key)].geometries(n, area, key);
 }
 
 // Apply user-configured gaps as a post-processing pass on layout rects.
@@ -1470,13 +1488,13 @@ function activeKey() {
 function setLayoutFor(key, name) {
   if (!LAYOUTS[name]) return;
   if (name === layoutFor(key)) return;
-  const wasFloating = layoutFor(key) === "floating";
-  const nowFloating = name === "floating";
-  // Entering floating: un-minimize any windows currently knocked-out in this
-  // key's queue. applyQueue's defensive prune will drop them from the queue
-  // (isTileable=false under the new layout), and prune leaves their minimize
-  // state untouched — without this pass they'd stay hidden after switching.
-  if (nowFloating && !wasFloating) {
+  const wasNoTile = !LAYOUTS[layoutFor(key)].tiles;
+  const nowNoTile = !LAYOUTS[name].tiles;
+  // Entering a no-tile layout (currently `floating`): un-minimize any windows
+  // currently knocked-out in this key's queue. applyQueue's defensive prune
+  // will drop them (isTileable=false under the new layout) and leaves their
+  // minimize state untouched — without this pass they'd stay hidden.
+  if (nowNoTile && !wasNoTile) {
     const q = queues.get(key);
     if (q) {
       for (const w of q) { if (w.minimized) w.minimized = false; }
@@ -1485,16 +1503,16 @@ function setLayoutFor(key, name) {
   if (name === CFG.layout) layouts.delete(key);
   else layouts.set(key, name);
   savePerKeyLayouts();
-  // Leaving floating: no windows are tracked for this key (they were pruned
-  // when we entered floating). Discover eligible windows from the workspace
-  // and track them so retileKey has something to tile.
-  if (wasFloating && !nowFloating) {
+  // Leaving a no-tile layout: no windows are tracked for this key (they were
+  // pruned on entry). Discover eligible windows from the workspace and track
+  // them so retileKey has something to tile.
+  if (wasNoTile && !nowNoTile) {
     for (const w of allWindows()) {
       const desk = singleDesktop(w);
       if (desk && w.output && keyFor(w.output, desk) === key) track(w);
     }
   }
-  log("layout[" + key + "]=" + name + " cap=" + CAPS[name]);
+  log("layout[" + key + "]=" + name + " cap=" + LAYOUTS[name].cap);
   retileKey(key);
 }
 
@@ -1682,11 +1700,19 @@ function rebuildQueues() {
 }
 
 function init() {
-  log("loaded; default layout=" + CFG.layout + " cap=" + CAPS[CFG.layout]);
-  // Warn about cap=0 (unlimited) fallbacks on layouts with hardcoded geometry.
-  // leftTile / rightTile scale to arbitrary N and don't warn.
-  if (CFG.capAutoGrid   === 0) log("CapAutoGrid=0 (unlimited) → falls back to 12 (autoGrid geometry defined for N=1..12)");
-  if (CFG.capCenterTile === 0) log("CapCenterTile=0 (unlimited) → falls back to 9 (centerTile geometry defined for N=1..9)");
+  log("loaded; default layout=" + CFG.layout + " cap=" + LAYOUTS[CFG.layout].cap);
+  // Warn about cap=0 (unlimited) on layouts with hardcoded geometry ranges
+  // (`maxN` set) — they fall back to their natural max. Scale-freely layouts
+  // (leftTile / rightTile, maxN=null) don't warn since MAX_SAFE_INTEGER is
+  // the "true" answer.
+  Object.keys(LAYOUTS).forEach(function (name) {
+    const entry = LAYOUTS[name];
+    if (entry.cap === 0 && entry.maxN !== null) {
+      const capKey = "Cap" + name.charAt(0).toUpperCase() + name.slice(1);
+      log(capKey + "=0 (unlimited) → falls back to " + entry.maxN +
+          " (" + name + " geometry defined for N=1.." + entry.maxN + ")");
+    }
+  });
 
   // Ping the persistence helper. Fire-and-forget with a callback: if the
   // service isn't installed (or the daemon crashed), the callback fires
@@ -1738,15 +1764,17 @@ function init() {
     return;
   }
 
-  // Layout — cycle and direct-set.
-  registerShortcut("KwiltCycleLayout",  "Kwilt: Cycle window layout",       "Meta+Ctrl+Shift+L", cycleLayout);
-  registerShortcut("KwiltLayoutGrid",    "Kwilt: Layout — autoGrid",        "Meta+Ctrl+G",       function () { setLayout("autoGrid"); });
-  registerShortcut("KwiltLayoutCenter",  "Kwilt: Layout — centerTile",      "Meta+Ctrl+C",       function () { setLayout("centerTile"); });
-  registerShortcut("KwiltLayoutMonocle", "Kwilt: Layout — monocle",         "Meta+Ctrl+M",       function () { setLayout("monocle"); });
-  registerShortcut("KwiltLayoutDual",    "Kwilt: Layout — dual",            "Meta+Ctrl+D",       function () { setLayout("dual"); });
-  registerShortcut("KwiltLayoutLeft",    "Kwilt: Layout — leftTile",        "Meta+Ctrl+L",       function () { setLayout("leftTile"); });
-  registerShortcut("KwiltLayoutRight",   "Kwilt: Layout — rightTile",       "Meta+Ctrl+T",       function () { setLayout("rightTile"); });
-  registerShortcut("KwiltLayoutFloating","Kwilt: Layout — floating",        "Meta+Ctrl+F",       function () { setLayout("floating"); });
+  // Layout — cycle and direct-set. Direct-set shortcuts are driven from
+  // the LAYOUTS registry: adding a layout with a `shortcut` field wires
+  // it here automatically. `shortcutId` is frozen per-layout so existing
+  // user rebindings in kglobalshortcutsrc survive schema changes.
+  registerShortcut("KwiltCycleLayout", "Kwilt: Cycle window layout", "Meta+Ctrl+Shift+L", cycleLayout);
+  Object.keys(LAYOUTS).forEach(function (name) {
+    const entry = LAYOUTS[name];
+    if (!entry.shortcut) return;
+    registerShortcut(entry.shortcutId, "Kwilt: Layout — " + name, entry.shortcut,
+                     function () { setLayout(name); });
+  });
 
   // Master pin: pinned window claims visible[0] on its (output, virtualDesktop).
   registerShortcut("KwiltPinMaster",     "Kwilt: Toggle master pin on active window", "Meta+S",  toggleMasterPin);
