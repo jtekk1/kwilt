@@ -73,7 +73,7 @@ npm run install:local  # kpackagetool6 -t KWin/Script -i build/kwilt-<VERSION>.k
 
 ## Architecture
 
-Single file: `contents/code/main.js` (~360 lines). `metadata.json` is the KPackage manifest KWin reads.
+Single file: `contents/code/main.js` (~1750 lines). `metadata.json` is the KPackage manifest KWin reads.
 
 **Runtime model.** This script runs *inside the KWin process* on a QJSEngine. Globals like `workspace`, `KWin`, `print`, and `registerShortcut` are injected by KWin — they are not standard JS. There is no `console`, no `require`/`import`, no `setTimeout` you should rely on, no `child_process`/`os.system`/shell. Signals are connected with `.connect(fn)`. Window objects are live Qt objects; properties like `w.frameGeometry`, `w.minimized`, `w.output`, `w.desktops` mutate the WM directly when set. **New KWin globals you introduce in code must also be added to `eslint.config.js`'s `globals` map**, else lint fails with `no-undef`.
 
