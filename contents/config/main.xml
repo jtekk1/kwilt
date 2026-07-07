@@ -79,5 +79,25 @@
             <default></default>
         </entry>
 
+        <!--
+          Persisted runtime state, written by Kwilt at mutation-time via the
+          dev.jtekk.KwiltConfigWriter D-Bus helper (see scripts/install-
+          persistence.sh). Not exposed in config.ui — these are not user-
+          tunable, they're state Kwilt maintains and re-reads on init.
+          Empty defaults so a fresh install has no ghost state.
+        -->
+
+        <entry name="PerKeyLayoutsJson" type="String">
+            <default></default>
+        </entry>
+
+        <entry name="RowSplitsJson" type="String">
+            <default></default>
+        </entry>
+
+        <entry name="InterColSplitsJson" type="String">
+            <default></default>
+        </entry>
+
     </group>
 </kcfg>
