@@ -3,9 +3,9 @@
     "KPlugin": {
         "Id": "kwilt",
         "Name": "Kwilt",
-        "Description": "Window tiling with six layouts (autoGrid, centerTile, monocle, dual, leftTile, rightTile), per-(output, virtualDesktop) layout overrides, master pin (Meta+S), mouse resize, and drag-to-rearrange.",
+        "Description": "Window tiling with seven layouts (autoGrid, centerTile, monocle, dual, leftTile, rightTile, floating), per-(output, virtualDesktop) overrides, master pin (Meta+S), float toggle (Meta+\\), mouse resize, drag-to-rearrange, and optional persistence.",
         "Icon": "preferences-system-windows-script-test",
-        "Version": "0.8.0-beta.5",
+        "Version": "0.9.0-beta.6",
         "License": "GPL-3.0-or-later",
         "EnabledByDefault": false,
         "Authors": [
