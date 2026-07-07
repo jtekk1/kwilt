@@ -44,6 +44,7 @@
      <item><property name="text"><string>dual</string></property></item>
      <item><property name="text"><string>leftTile</string></property></item>
      <item><property name="text"><string>rightTile</string></property></item>
+     <item><property name="text"><string>floating</string></property></item>
     </widget>
    </item>
 

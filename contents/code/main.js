@@ -41,7 +41,7 @@ function clamp(value, min, max) {
 // then reload the script (./dev-reload.sh or relogin). Defaults match the
 // hardcoded values that were here before this commit, so an unconfigured
 // kwinrc is a no-op.
-const VALID_LAYOUTS = ["autoGrid", "centerTile", "monocle", "dual", "leftTile", "rightTile"];
+const VALID_LAYOUTS = ["autoGrid", "centerTile", "monocle", "dual", "leftTile", "rightTile", "floating"];
 
 const CFG = (function () {
   const layoutRaw = cfg("Layout", "centerTile");
@@ -127,6 +127,9 @@ const CAPS = {
   dual:       2,
   leftTile:   CFG.capLeftTile,
   rightTile:  CFG.capRightTile,
+  // floating never tiles anything — isTileable short-circuits, the queue
+  // stays empty, so cap is never resolved. The 0 is bookkeeping.
+  floating:   0,
 };
 
 function layoutFor(key) { return layouts.get(key) || CFG.layout; }
@@ -361,6 +364,11 @@ function singleDesktop(w) {
 
 function isTileable(w) {
   if (!w) return false;
+  // Per-window float opt-out. Set by toggleFloat (Meta+\). Wins over every
+  // other check — a floated window stays untracked even if it would otherwise
+  // qualify. The `=== true` guard means "unset" defaults to tileable, so
+  // fresh windows aren't accidentally floated.
+  if (w._kwiltFloat === true) return false;
   if (!w.normalWindow) return false;
   if (w.fullScreen) return false;
   if (w.onAllDesktops) return false;
@@ -382,6 +390,11 @@ function isTileable(w) {
       if (rc.indexOf(pat) !== -1 || rn.indexOf(pat) !== -1) return false;
     }
   }
+  // Per-key floating: if this window's (output, virtualDesktop) is set to the
+  // "floating" layout, nothing on that key tiles. Deferred to the end so all
+  // other rejections still apply (dialogs, popups, fullscreen, etc. stay
+  // non-tileable regardless of the key's layout).
+  if (layoutFor(keyFor(w.output, singleDesktop(w))) === "floating") return false;
   return true;
 }
 
@@ -726,6 +739,12 @@ function geometriesSideTile(n, area, masterOnLeft, queueKey) {
 function geometriesLeftTile(n, area, key)  { return geometriesSideTile(n, area, true,  key); }
 function geometriesRightTile(n, area, key) { return geometriesSideTile(n, area, false, key); }
 
+// floating — no tile geometry. isTileable returns false for any window on a
+// key whose layout is "floating", so the queue is empty and applyQueue never
+// asks for rects. This stub only exists to satisfy the LAYOUTS[name] check
+// in setLayoutFor and cycleLayout's key iteration.
+function geometriesFloating() { return []; }
+
 const LAYOUTS = {
   autoGrid:   geometriesAutoGrid,
   centerTile: geometriesCenterTile,
@@ -733,6 +752,7 @@ const LAYOUTS = {
   dual:       geometriesDual,
   leftTile:   geometriesLeftTile,
   rightTile:  geometriesRightTile,
+  floating:   geometriesFloating,
 };
 
 function geometries(key, n, area) {
@@ -1379,9 +1399,33 @@ function activeKey() {
 function setLayoutFor(key, name) {
   if (!LAYOUTS[name]) return;
   if (name === layoutFor(key)) return;
+  const wasFloating = layoutFor(key) === "floating";
+  const nowFloating = name === "floating";
+  // Entering floating: un-minimize any windows currently knocked-out in this
+  // key's queue. applyQueue's defensive prune will drop them from the queue
+  // (isTileable=false under the new layout), and prune leaves their minimize
+  // state untouched — without this pass they'd stay hidden after switching.
+  if (nowFloating && !wasFloating) {
+    const q = queues.get(key);
+    if (q) {
+      for (const w of q) { if (w.minimized) w.minimized = false; }
+    }
+  }
   if (name === CFG.layout) layouts.delete(key);
   else layouts.set(key, name);
   savePerKeyLayouts();
+  // Leaving floating: no windows are tracked for this key (they were pruned
+  // when we entered floating). Discover eligible windows from the workspace
+  // and track them so retileKey has something to tile.
+  if (wasFloating && !nowFloating) {
+    const list = workspace.windowList
+      ? workspace.windowList()
+      : (workspace.clientList ? workspace.clientList() : []);
+    for (const w of list) {
+      const desk = singleDesktop(w);
+      if (desk && w.output && keyFor(w.output, desk) === key) track(w);
+    }
+  }
   log("layout[" + key + "]=" + name + " cap=" + CAPS[name]);
   retileKey(key);
 }
@@ -1421,6 +1465,30 @@ function toggleMasterPin() {
     log("pinned '" + (w.resourceName || "?") + "' as master on " + found.key);
   }
   retileKey(found.key);
+}
+
+// Toggle per-window float opt-out on the active window. `_kwiltFloat` is a
+// Qt dynamic property (session-only, dies with the window). When true,
+// isTileable short-circuits — the window stays out of every queue and keeps
+// whatever geometry the user gives it. Floating a tracked window untracks it,
+// drops its master pin, and unminimizes if it was in a knocked-out slot;
+// un-floating re-tracks (subject to the rest of isTileable) and retiles.
+function toggleFloat() {
+  const w = workspace.activeWindow;
+  if (!w) return;
+  const nowFloat = !(w._kwiltFloat === true);
+  w._kwiltFloat = nowFloat;
+  if (nowFloat) {
+    const oldKey = untrack(w);
+    if (oldKey && pins.get(oldKey) === w) pins.delete(oldKey);
+    if (w.minimized) w.minimized = false;
+    if (oldKey) retileKey(oldKey);
+    log("floated '" + (w.resourceName || "?") + "'");
+  } else {
+    const newKey = track(w);
+    if (newKey) retileKey(newKey);
+    log("un-floated '" + (w.resourceName || "?") + "'");
+  }
 }
 
 // tileSlotOf returns the visible-tile context of a window, or null if the
@@ -1607,9 +1675,11 @@ function init() {
   registerShortcut("KwiltLayoutDual",    "Kwilt: Layout — dual",            "Meta+Ctrl+D",       function () { setLayout("dual"); });
   registerShortcut("KwiltLayoutLeft",    "Kwilt: Layout — leftTile",        "Meta+Ctrl+L",       function () { setLayout("leftTile"); });
   registerShortcut("KwiltLayoutRight",   "Kwilt: Layout — rightTile",       "Meta+Ctrl+T",       function () { setLayout("rightTile"); });
+  registerShortcut("KwiltLayoutFloating","Kwilt: Layout — floating",        "Meta+Ctrl+F",       function () { setLayout("floating"); });
 
   // Master pin: pinned window claims visible[0] on its (output, virtualDesktop).
   registerShortcut("KwiltPinMaster",     "Kwilt: Toggle master pin on active window", "Meta+S",  toggleMasterPin);
+  registerShortcut("KwiltToggleFloat",   "Kwilt: Toggle float on active window",      "Meta+\\", toggleFloat);
 
   // Manual recovery: re-snapshot the queues from workspace.windowList().
   // Use when you suspect a ghost tile slot — quicker than ./dev-reload.sh.
