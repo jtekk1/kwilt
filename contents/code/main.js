@@ -836,10 +836,34 @@ function queueFor(out, desk, create) {
   return q;
 }
 
+// `_kwiltQueueKey` is a Qt dynamic property set on tracked windows in track()
+// and cleared in untrack(); it's a hint pointing at the queue that (probably)
+// contains this window. findContaining consults it first — an O(1) Map.get +
+// one small-queue indexOf — falling back to a linear walk over every queue
+// when the hint is absent or stale. Common case (onActivated on a tracked
+// window) skips the walk over every (output, virtualDesktop) queue.
+//
+// Stale-hint paths: applyQueue's defensive prune splices windows out of the
+// queue without touching the hint; rebuildQueues rebuilds from scratch while
+// old dynamic properties persist across the reload. The linear-fallback
+// heals the hint when it finds the window elsewhere, so stale hints
+// self-repair on next access rather than accumulating.
 function findContaining(w) {
+  if (!w) return null;
+  const hint = w._kwiltQueueKey;
+  if (hint) {
+    const q = queues.get(hint);
+    if (q) {
+      const idx = q.indexOf(w);
+      if (idx !== -1) return { key: hint, q: q, idx: idx };
+    }
+  }
   for (const [key, q] of queues) {
     const idx = q.indexOf(w);
-    if (idx !== -1) return { key: key, q: q, idx: idx };
+    if (idx !== -1) {
+      w._kwiltQueueKey = key;
+      return { key: key, q: q, idx: idx };
+    }
   }
   return null;
 }
@@ -963,9 +987,11 @@ function retileAll() {
 function track(w) {
   if (!isTileable(w)) return null;
   const desk = singleDesktop(w);
+  const key = keyFor(w.output, desk);
   const q = queueFor(w.output, desk, true);
   if (q.indexOf(w) === -1) q.push(w);
-  return keyFor(w.output, desk);
+  w._kwiltQueueKey = key;
+  return key;
 }
 
 // `found` is optional. Callers that already resolved `findContaining(w)`
@@ -976,6 +1002,7 @@ function untrack(w, found) {
   if (!found) return null;
   found.q.splice(found.idx, 1);
   restoreBorder(w);
+  w._kwiltQueueKey = null;
   return found.key;
 }
 
