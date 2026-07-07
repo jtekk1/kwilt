@@ -150,6 +150,12 @@ function capFor(key) {
   return raw;
 }
 
+// Split index for a queue on `key` — everything before is knocked-out, from
+// here on is visible. Every place that reasons about knocked/visible slices
+// derives it from `q.length - capFor(key)` clamped to zero; the helper names
+// that convention so the arithmetic doesn't have to be re-parsed at each site.
+function splitOf(key, q) { return Math.max(0, q.length - capFor(key)); }
+
 // True when the work area's aspect ratio exceeds 2:1 — the trigger for the
 // NonMasterColumns "auto" mode to pick 2 columns instead of 1. Guards
 // against zero height (defensive; work areas shouldn't be zero-height).
@@ -261,27 +267,19 @@ function saveInterColSplitsAll() {
 // PerKeyLayoutsJson entries are validated against VALID_LAYOUTS so a stale
 // or renamed layout doesn't strand a queue on an unknown mode.
 (function hydrate() {
-  const persistedLayouts = readJsonMap("PerKeyLayoutsJson");
-  persistedLayouts.forEach(function (v, k) {
-    if (typeof v === "string" && VALID_LAYOUTS.indexOf(v) !== -1) layouts.set(k, v);
-  });
-
-  const persistedRowSplits = readJsonMap("RowSplitsJson");
-  persistedRowSplits.forEach(function (v, k) {
-    if (Array.isArray(v)) rowSplits.set(k, v);
-  });
-
-  const persistedInterCol = readJsonMap("InterColSplitsJson");
-  persistedInterCol.forEach(function (v, k) {
-    if (typeof v === "number") interColSplits.set(k, v);
-  });
-
-  const restored = persistedLayouts.size + persistedRowSplits.size + persistedInterCol.size;
-  if (restored > 0) {
-    log("hydrated persisted state: " +
-        persistedLayouts.size + " layout(s), " +
-        persistedRowSplits.size + " row-split(s), " +
-        persistedInterCol.size + " inter-col split(s)");
+  function hydrateInto(configKey, target, ok) {
+    const parsed = readJsonMap(configKey);
+    parsed.forEach(function (v, k) { if (ok(v)) target.set(k, v); });
+    return parsed.size;
+  }
+  const nL = hydrateInto("PerKeyLayoutsJson", layouts,
+                         function (v) { return typeof v === "string" && VALID_LAYOUTS.indexOf(v) !== -1; });
+  const nR = hydrateInto("RowSplitsJson", rowSplits, Array.isArray);
+  const nI = hydrateInto("InterColSplitsJson", interColSplits,
+                         function (v) { return typeof v === "number"; });
+  if (nL + nR + nI > 0) {
+    log("hydrated persisted state: " + nL + " layout(s), " +
+        nR + " row-split(s), " + nI + " inter-col split(s)");
   }
 })();
 
@@ -327,30 +325,27 @@ function centerTileSlotMeta(slotIdx, n) {
 }
 
 // Map a side-tile (leftTile / rightTile) visible slot -> {column, row,
-// colRows} in 2-column non-master mode. Assumes the geometriesSideTile fill
-// algorithm:
+// colRows}. `nmCols` is the effective non-master column count (1 or 2). With
+// nmCols===1 OR n_nm===1 the non-master area collapses to a single wide
+// column stacked vertically. Otherwise it's the 2-column fill algorithm used
+// by geometriesSideTile:
 //   slot 1 -> col_inner row 0
 //   slot 2 -> col_outer row 0
 //   slot k>=3: k odd -> col_outer row (k-1)/2 ; k even -> col_inner row k/2-1
-// Row counts: inner = floor(n_nm/2), outer = ceil(n_nm/2). n_nm < 2 returns
-// null (single wide column has nothing to split vertically).
-function sideTileSlotMeta2Col(slotIdx, n_nm) {
+// Row counts: inner = floor(n_nm/2), outer = ceil(n_nm/2). Returns null for
+// slot 0 (master has no side-tile meta) and n_nm < 2 (no rows to split).
+function sideTileSlotMeta(slotIdx, n_nm, nmCols) {
   if (slotIdx === 0) return null;
   if (n_nm < 2)      return null;
+  if (nmCols === 1 || n_nm === 1) {
+    return { column: "single", row: slotIdx - 1, colRows: n_nm };
+  }
   const innerRows = Math.floor(n_nm / 2);
   const outerRows = Math.ceil(n_nm / 2);
   if (slotIdx === 1) return { column: "inner", row: 0, colRows: innerRows };
   if (slotIdx === 2) return { column: "outer", row: 0, colRows: outerRows };
   if (slotIdx % 2 === 1) return { column: "outer", row: (slotIdx - 1) / 2, colRows: outerRows };
   return { column: "inner", row: slotIdx / 2 - 1, colRows: innerRows };
-}
-
-// Side-tile 1-column non-master mode: all non-masters stack vertically in
-// one "single" column. Slot k>=1 -> row k-1. n_nm < 2 has nothing to split.
-function sideTileSlotMeta1Col(slotIdx, n_nm) {
-  if (slotIdx === 0) return null;
-  if (n_nm < 2)      return null;
-  return { column: "single", row: slotIdx - 1, colRows: n_nm };
 }
 
 function outputId(out) {
@@ -410,6 +405,15 @@ function isTileable(w) {
 
 function workArea(out, desk) {
   return workspace.clientArea(KWin.MaximizeArea, out, desk);
+}
+
+// Enumerate every top-level window KWin knows about. `windowList` is the
+// Plasma 6 name; `clientList` is retained for older KWin builds — either can
+// be the injected global depending on which vintage of KWin is running.
+function allWindows() {
+  if (workspace.windowList) return workspace.windowList();
+  if (workspace.clientList) return workspace.clientList();
+  return [];
 }
 
 function rect(x, y, w, h) { return { x: x, y: y, width: w, height: h }; }
@@ -840,6 +844,33 @@ function findContaining(w) {
   return null;
 }
 
+// In-place swap of two array elements. Named because half a dozen queue
+// mutations (pin, master-exempt reflow, drag-drop, swap-by-direction) all
+// need it and the three-line tmp dance obscures the higher-level intent.
+function swap(arr, i, j) { const t = arr[i]; arr[i] = arr[j]; arr[j] = t; }
+
+// Resolve `w`'s (output, virtualDesktop) pair. Returns null if either can't
+// be pinned down (window on all desktops, output missing, etc.) — every site
+// that needs both together also needs to bail on either being absent, so the
+// null return matches the shape callers already had.
+function outputAndDesk(w) {
+  if (!w) return null;
+  const desk = singleDesktop(w);
+  if (!desk || !w.output) return null;
+  return { out: w.output, desk: desk };
+}
+
+// Move a knocked-out queue entry to the tail (newest visible) and retile.
+// Both external un-minimize and taskbar-activation call this shape. Callers
+// do the `found.idx < split` gate themselves since that test needs the
+// queue's cap context.
+function promoteKnockedToNewest(found) {
+  const w = found.q[found.idx];
+  found.q.splice(found.idx, 1);
+  found.q.push(w);
+  retileKey(found.key);
+}
+
 // If a pin exists on `key` and the pinned window is currently in the queue's
 // visible slice, swap it into the queue position that maps to visible[0].
 // No-op when the pin isn't set, isn't in this queue right now (maximized /
@@ -847,16 +878,12 @@ function findContaining(w) {
 // in those cases and re-takes visible[0] as soon as it's visible again. Sticky
 // under drag-swap: dropping another tile onto the master position gets undone
 // on the next retile as the pin swaps back.
-function applyPin(q, key) {
+function applyPin(q, key, split) {
   const pinned = pins.get(key);
   if (!pinned) return;
   const idx = q.indexOf(pinned);
-  if (idx === -1) return;
-  const split = Math.max(0, q.length - capFor(key));
-  if (idx <= split) return;
-  const tmp = q[split];
-  q[split] = q[idx];
-  q[idx] = tmp;
+  if (idx === -1 || idx <= split) return;
+  swap(q, split, idx);
 }
 
 // Clear any pin entry pointing at `w` (there is at most one per window, since
@@ -893,14 +920,10 @@ function applyQueue(key, q, out, desk) {
     const master = masters.get(key);
     if (master) {
       const mIdx = q.indexOf(master);
-      if (mIdx !== -1 && mIdx !== split) {
-        const tmp = q[split];
-        q[split] = q[mIdx];
-        q[mIdx] = tmp;
-      }
+      if (mIdx !== -1 && mIdx !== split) swap(q, split, mIdx);
     }
   }
-  applyPin(q, key);
+  applyPin(q, key, split);
   const knocked = q.slice(0, split);
   const visible = q.slice(split);
   const geos = tilesFor(key, visible.length, workArea(out, desk));
@@ -909,8 +932,11 @@ function applyQueue(key, q, out, desk) {
   }
   visible.forEach(function (w, i) {
     if (w.minimized) w.minimized = false;
-    // Unmaximize before setting geometry, else maximize state overrides us.
-    if (w.maximizable) w.setMaximize(false, false);
+    // Unmaximize before setting geometry, else maximize state overrides us —
+    // but skip the KWin roundtrip when already in Restore mode, which is the
+    // common case. Also avoids the setMaximize→maximizedChanged self-signal
+    // path taking a needless lap through findContaining.
+    if (w.maximizable && maximizeMode(w) !== 0) w.setMaximize(false, false);
     forceNoBorder(w);
     w.frameGeometry = geos[i];
   });
@@ -942,8 +968,11 @@ function track(w) {
   return keyFor(w.output, desk);
 }
 
-function untrack(w) {
-  const found = findContaining(w);
+// `found` is optional. Callers that already resolved `findContaining(w)`
+// pass it in to skip the second walk over every queue; internal callers
+// omit it and pay the lookup once.
+function untrack(w, found) {
+  found = found || findContaining(w);
   if (!found) return null;
   found.q.splice(found.idx, 1);
   restoreBorder(w);
@@ -982,31 +1011,44 @@ function onMinimizedChanged(w) {
     }
     return;
   }
-  const split = Math.max(0, found.q.length - capFor(found.key));
+  const split = splitOf(found.key, found.q);
   if (w.minimized) {
     // User minimized a visible tile (taskbar / title-bar button / app). Honor
     // it: drop from the queue so the tile slot collapses instead of leaving
     // a ghost slot. Knocked-slice transitions are our own — no-op.
     if (found.idx >= split) {
-      untrack(w);
+      untrack(w, found);
       retileKey(found.key);
     }
   } else {
     // External un-minimize. If it's a knocked window coming back, promote it
     // like activation. Visible-slice transitions are our own — no-op.
-    if (found.idx < split) {
-      found.q.splice(found.idx, 1);
-      found.q.push(w);
-      retileKey(found.key);
-    }
+    if (found.idx < split) promoteKnockedToNewest(found);
   }
 }
 
-function onFullScreenChanged(w) {
+// Shared body for the fullscreen / maximize signal handlers. When `blocking`
+// is true (window went fullscreen or maximized), drop it from its queue and
+// let it float at whatever geometry KWin chose. When false (external un-
+// block), re-track and reflow. applyQueue's own `setMaximize(false, false)`
+// also fires this via onMaximizedChanged, but the window is already in its
+// queue then — the re-track branch short-circuits on `!found`, the untrack
+// branch sees Restore mode. No recursion.
+// Read the current maximize mode (0 = Restore, non-zero = some kind of
+// maximize). Prefers `requestedMaximizeMode` because it reflects the target
+// state during a transition; falls back to `maximizeMode` on KWin builds that
+// don't expose the requested form. Returns 0 when neither is available.
+function maximizeMode(w) {
+  if (typeof w.requestedMaximizeMode !== "undefined") return w.requestedMaximizeMode;
+  if (typeof w.maximizeMode !== "undefined") return w.maximizeMode;
+  return 0;
+}
+
+function reconcileBlocked(w, blocking) {
   const found = findContaining(w);
-  if (w.fullScreen) {
+  if (blocking) {
     if (found) {
-      untrack(w);
+      untrack(w, found);
       retileKey(found.key);
     }
   } else if (!found && isTileable(w)) {
@@ -1015,32 +1057,12 @@ function onFullScreenChanged(w) {
   }
 }
 
-// Symmetric to onFullScreenChanged. KWin::MaximizeMode: 0 = Restore (none),
-// 1 = Vertical, 2 = Horizontal, 3 = Full — anything non-zero means the user
-// asked for some kind of maximize, so we drop it from the queue and let it
-// float at whatever maximized geometry KWin chose. When the user un-maximizes
-// (mode → 0), we re-track and pull it back into the layout.
-//
-// applyQueue's own `setMaximize(false, false)` calls also fire this signal,
-// but the window is already in its queue at that point, so the re-track
-// branch short-circuits on `!found` and the untrack branch sees Restore mode
-// — both are no-ops. No recursion.
-function onMaximizedChanged(w) {
-  const mode = typeof w.requestedMaximizeMode !== "undefined" ? w.requestedMaximizeMode
-             : typeof w.maximizeMode          !== "undefined" ? w.maximizeMode
-             : 0;
-  const isMax = mode !== 0;
-  const found = findContaining(w);
-  if (isMax) {
-    if (found) {
-      untrack(w);
-      retileKey(found.key);
-    }
-  } else if (!found && isTileable(w)) {
-    const newKey = track(w);
-    if (newKey) retileKey(newKey);
-  }
-}
+function onFullScreenChanged(w) { reconcileBlocked(w, w.fullScreen); }
+
+// KWin::MaximizeMode: 0 = Restore (none), 1 = Vertical, 2 = Horizontal,
+// 3 = Full — anything non-zero means the user asked for some kind of
+// maximize.
+function onMaximizedChanged(w) { reconcileBlocked(w, maximizeMode(w) !== 0); }
 
 // Some windows die without windowRemoved firing reliably (apps that exit
 // abruptly, transient surfaces, etc.). Listening to per-window `closed`
@@ -1088,7 +1110,7 @@ function handleDrop(w) {
   const found = findContaining(w);
   if (!found) return;
 
-  const split = Math.max(0, found.q.length - capFor(found.key));
+  const split = splitOf(found.key, found.q);
   const visible = found.q.slice(split);
   const srcVisIdx = visible.indexOf(w);
   if (srcVisIdx === -1) {
@@ -1097,10 +1119,10 @@ function handleDrop(w) {
     return;
   }
 
-  const desk = singleDesktop(w);
-  if (!desk || !w.output) { retileKey(found.key); return; }
+  const od = outputAndDesk(w);
+  if (!od) { retileKey(found.key); return; }
 
-  const area = workArea(w.output, desk);
+  const area = workArea(od.out, od.desk);
   const tiles = tilesFor(found.key, visible.length, area);
 
   const fg = w.frameGeometry;
@@ -1121,11 +1143,7 @@ function handleDrop(w) {
     return;
   }
 
-  const srcQIdx = split + srcVisIdx;
-  const dstQIdx = split + dstVisIdx;
-  const tmp = found.q[srcQIdx];
-  found.q[srcQIdx] = found.q[dstQIdx];
-  found.q[dstQIdx] = tmp;
+  swap(found.q, split + srcVisIdx, split + dstVisIdx);
   // Drag-swap into the master slot: promote the new occupant to master so
   // the exemption swap in applyQueue doesn't snap the old master back into
   // visible[0] on the next retile. Only matters when the drop touched slot
@@ -1143,8 +1161,8 @@ function handleDrop(w) {
 function captureResizeCtx(w) {
   const found = findContaining(w);
   if (!found) return null;
-  const desk = singleDesktop(w);
-  if (!desk || !w.output) return null;
+  const od = outputAndDesk(w);
+  if (!od) return null;
   const cap = capFor(found.key);
   const split = Math.max(0, found.q.length - cap);
   const slotIdx = found.idx - split;
@@ -1154,7 +1172,7 @@ function captureResizeCtx(w) {
     layout: layoutFor(found.key),
     key: found.key,
     slotIdx: slotIdx,
-    area: workArea(w.output, desk),
+    area: workArea(od.out, od.desk),
     n: Math.min(found.q.length, cap),
     // Drag-start geometry snapshot so handleResize can detect which edge
     // moved (top vs bottom for vertical drags) and compute delta ratios
@@ -1248,7 +1266,7 @@ function tryUpdateMasterWidth(ctx, fg) {
         masterEdgeMoved = masterOnLeft ? leftEdgeMoved : rightEdgeMoved;
         masterFrac = 1 - fg.width / aw;
       } else {
-        const meta = sideTileSlotMeta2Col(ctx.slotIdx, ctx.n - 1);
+        const meta = sideTileSlotMeta(ctx.slotIdx, ctx.n - 1, 2);
         if (!meta || meta.column !== "inner") return false;
         // Edge-position back-solve — independent of the current inter-column
         // split. leftTile inner LEFT edge is master boundary; rightTile inner
@@ -1291,9 +1309,7 @@ function tryUpdateRowSplit(ctx, fg) {
   } else if (layout === "leftTile" || layout === "rightTile") {
     const n_nm = ctx.n - 1;
     const nmCols = effectiveNonMasterColumns(ctx.area);
-    meta = (nmCols === 1 || n_nm === 1)
-      ? sideTileSlotMeta1Col(ctx.slotIdx, n_nm)
-      : sideTileSlotMeta2Col(ctx.slotIdx, n_nm);
+    meta = sideTileSlotMeta(ctx.slotIdx, n_nm, nmCols);
   } else {
     return false;
   }
@@ -1344,7 +1360,7 @@ function tryUpdateInterColSplit(ctx, fg) {
   const nmCols = effectiveNonMasterColumns(ctx.area);
   if (nmCols !== 2 || n_nm < 2) return false;
 
-  const meta = sideTileSlotMeta2Col(ctx.slotIdx, n_nm);
+  const meta = sideTileSlotMeta(ctx.slotIdx, n_nm, nmCols);
   if (!meta) return false;
 
   const startFg = ctx.startFg;
@@ -1402,13 +1418,9 @@ function onActivated(w) {
   if (!w) return;
   const found = findContaining(w);
   if (found) {
-    const split = Math.max(0, found.q.length - capFor(found.key));
-    if (found.idx < split) {
-      // Knocked-out window activated — promote to most-recent.
-      found.q.splice(found.idx, 1);
-      found.q.push(w);
-      retileKey(found.key);
-    }
+    const split = splitOf(found.key, found.q);
+    // Knocked-out window activated — promote to most-recent.
+    if (found.idx < split) promoteKnockedToNewest(found);
   }
   if (w !== lastFocused) {
     prevFocused = lastFocused;
@@ -1421,11 +1433,8 @@ function onActivated(w) {
 // determined — direct-set / cycle shortcuts log a warning and no-op in that
 // case rather than mutating a random key.
 function activeKey() {
-  const w = workspace.activeWindow;
-  if (!w) return null;
-  const desk = singleDesktop(w);
-  if (!desk || !w.output) return null;
-  return keyFor(w.output, desk);
+  const od = outputAndDesk(workspace.activeWindow);
+  return od ? keyFor(od.out, od.desk) : null;
 }
 
 // Set the layout on a specific (output, virtualDesktop) key. Missing keys
@@ -1453,10 +1462,7 @@ function setLayoutFor(key, name) {
   // when we entered floating). Discover eligible windows from the workspace
   // and track them so retileKey has something to tile.
   if (wasFloating && !nowFloating) {
-    const list = workspace.windowList
-      ? workspace.windowList()
-      : (workspace.clientList ? workspace.clientList() : []);
-    for (const w of list) {
+    for (const w of allWindows()) {
       const desk = singleDesktop(w);
       if (desk && w.output && keyFor(w.output, desk) === key) track(w);
     }
@@ -1534,12 +1540,12 @@ function tileSlotOf(w) {
   if (!w) return null;
   const found = findContaining(w);
   if (!found) return null;
-  const split = Math.max(0, found.q.length - capFor(found.key));
+  const split = splitOf(found.key, found.q);
   if (found.idx < split) return null;
-  const desk = singleDesktop(w);
-  if (!desk || !w.output) return null;
+  const od = outputAndDesk(w);
+  if (!od) return null;
   const visibleCount = found.q.length - split;
-  const tiles = tilesFor(found.key, visibleCount, workArea(w.output, desk));
+  const tiles = tilesFor(found.key, visibleCount, workArea(od.out, od.desk));
   const visIdx = found.idx - split;
   return { found: found, split: split, visIdx: visIdx, tiles: tiles };
 }
@@ -1568,30 +1574,33 @@ function neighborSlot(currentVisIdx, tiles, direction) {
   return bestIdx;
 }
 
-function focusByDirection(direction) {
+// Resolve the active window's slot and the neighbor slot in `direction`.
+// Returns null when there's no active tiled window OR no neighbor in that
+// direction — both focus/swap handlers want to no-op on either failure.
+function directionTarget(direction) {
   const slot = tileSlotOf(workspace.activeWindow);
-  if (!slot) return;
+  if (!slot) return null;
   const nextVis = neighborSlot(slot.visIdx, slot.tiles, direction);
-  if (nextVis === -1) return;
-  const target = slot.found.q[slot.split + nextVis];
+  if (nextVis === -1) return null;
+  return { slot: slot, nextVis: nextVis };
+}
+
+function focusByDirection(direction) {
+  const t = directionTarget(direction);
+  if (!t) return;
+  const target = t.slot.found.q[t.slot.split + t.nextVis];
   if (target) {
     workspace.activeWindow = target;
-    log("focus " + direction + " → vis " + nextVis);
+    log("focus " + direction + " → vis " + t.nextVis);
   }
 }
 
 function swapByDirection(direction) {
-  const slot = tileSlotOf(workspace.activeWindow);
-  if (!slot) return;
-  const nextVis = neighborSlot(slot.visIdx, slot.tiles, direction);
-  if (nextVis === -1) return;
-  const srcQ = slot.split + slot.visIdx;
-  const dstQ = slot.split + nextVis;
-  const tmp = slot.found.q[srcQ];
-  slot.found.q[srcQ] = slot.found.q[dstQ];
-  slot.found.q[dstQ] = tmp;
-  log("swap " + direction + " → vis " + nextVis);
-  retileKey(slot.found.key);
+  const t = directionTarget(direction);
+  if (!t) return;
+  swap(t.slot.found.q, t.slot.split + t.slot.visIdx, t.slot.split + t.nextVis);
+  log("swap " + direction + " → vis " + t.nextVis);
+  retileKey(t.slot.found.key);
 }
 
 function cycleFocus() {
@@ -1599,7 +1608,7 @@ function cycleFocus() {
   if (!w) return;
   const found = findContaining(w);
   if (!found) return;
-  const split = Math.max(0, found.q.length - capFor(found.key));
+  const split = splitOf(found.key, found.q);
   const visCount = found.q.length - split;
   if (visCount < 2) return;
   const curVis = found.idx >= split ? (found.idx - split) : -1;
@@ -1623,7 +1632,7 @@ function focusLast() {
 // appears, this re-snapshots ground truth without needing a script reload.
 function rebuildQueues() {
   queues.clear();
-  const existing = workspace.windowList ? workspace.windowList() : (workspace.clientList ? workspace.clientList() : []);
+  const existing = allWindows();
   for (const w of existing) {
     // Stale Qt dynamic property from a prior script-load — clear so
     // bindWindow actually re-connects signals against the new JS engine.
@@ -1669,7 +1678,7 @@ function init() {
              });
   }
 
-  const existing = workspace.windowList ? workspace.windowList() : (workspace.clientList ? workspace.clientList() : []);
+  const existing = allWindows();
   for (const w of existing) {
     // _kwiltBound is a Qt dynamic property that persists across script
     // reloads (the QObject lives in KWin), but the signal connections
