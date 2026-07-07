@@ -182,6 +182,16 @@ const queues = new Map();
 // visible[0] slot; toggleMasterPin (Meta+S) sets/clears it.
 const pins = new Map();
 
+// Map<string, Window>: key = `${outputId}|${desktopId}` — the current
+// visible[0] occupant of that key's queue. Recorded at the end of every
+// applyQueue and consulted at the start of the next one, so cap-based FIFO
+// eviction skips the master slot: overflow evicts visible[1] instead of
+// visible[0]. Distinct from `pins` — pin is a user-explicit lock on a
+// specific window's identity; this tracks the slot's current occupant, which
+// changes naturally as the user drag-swaps or as the master closes. Session-
+// only. cap==1 (monocle) is a natural no-op (no visible[1] to sacrifice).
+const masters = new Map();
+
 // Map<string, number[]>: key = `${queueKey}|${layout}|${column}` — per-column
 // row-height ratios for centerTile and (2-col mode) leftTile/rightTile.
 // Ratios sum to 1 and have one entry per row in that column. Missing entries
@@ -871,9 +881,26 @@ function applyQueue(key, q, out, desk) {
       q.splice(i, 1);
     }
   }
-  applyPin(q, key);
+  // Master-slot exemption: if a previous apply recorded a master for this
+  // key and it's still in the queue, swap it to q[split] so cap-based FIFO
+  // eviction knocks visible[1] (old second-oldest visible) instead of
+  // visible[0]. No-op when there's no overflow (split===0), when cap<2
+  // (monocle has no visible[1] to sacrifice), or when the master already
+  // holds q[split]. Runs BEFORE applyPin so an explicit pin still wins.
   const cap = capFor(key);
   const split = Math.max(0, q.length - cap);
+  if (cap >= 2 && split > 0) {
+    const master = masters.get(key);
+    if (master) {
+      const mIdx = q.indexOf(master);
+      if (mIdx !== -1 && mIdx !== split) {
+        const tmp = q[split];
+        q[split] = q[mIdx];
+        q[mIdx] = tmp;
+      }
+    }
+  }
+  applyPin(q, key);
   const knocked = q.slice(0, split);
   const visible = q.slice(split);
   const geos = tilesFor(key, visible.length, workArea(out, desk));
@@ -887,12 +914,15 @@ function applyQueue(key, q, out, desk) {
     forceNoBorder(w);
     w.frameGeometry = geos[i];
   });
+  // Record the current master for the next apply's exemption check.
+  if (visible.length > 0) masters.set(key, visible[0]);
+  else masters.delete(key);
   log("apply " + key + " n=" + q.length + " visible=" + visible.length + " knocked=" + knocked.length);
 }
 
 function retileKey(key) {
   const q = queues.get(key);
-  if (!q || q.length === 0) { queues.delete(key); return; }
+  if (!q || q.length === 0) { queues.delete(key); masters.delete(key); return; }
   const member = q[0];
   const desk = singleDesktop(member);
   if (!member.output || !desk) return;
@@ -1096,6 +1126,11 @@ function handleDrop(w) {
   const tmp = found.q[srcQIdx];
   found.q[srcQIdx] = found.q[dstQIdx];
   found.q[dstQIdx] = tmp;
+  // Drag-swap into the master slot: promote the new occupant to master so
+  // the exemption swap in applyQueue doesn't snap the old master back into
+  // visible[0] on the next retile. Only matters when the drop touched slot
+  // 0 — swaps between two non-master tiles leave the master slot alone.
+  if (srcVisIdx === 0 || dstVisIdx === 0) masters.set(found.key, found.q[split]);
   log("swap slot " + srcVisIdx + " <-> " + dstVisIdx);
   retileKey(found.key);
 }
