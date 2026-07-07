@@ -22,7 +22,7 @@ Personal KWin tiling script.
 
 ## Layouts
 
-Six layouts are implemented. Choose the default via `Layout` in the config UI (System Settings → Window Management → KWin Scripts → Kwilt → Configure), or via `kwriteconfig6 --file kwinrc --group Script-kwilt --key Layout <name>`. Set on the active (output, virtualDesktop) at runtime via the layout shortcuts (`Meta+Ctrl+G/C/M/D/L/T`) or cycle with `Meta+Ctrl+Shift+L`.
+Seven layouts are implemented. Choose the default via `Layout` in the config UI (System Settings → Window Management → KWin Scripts → Kwilt → Configure), or via `kwriteconfig6 --file kwinrc --group Script-kwilt --key Layout <name>`. Set on the active (output, virtualDesktop) at runtime via the layout shortcuts (`Meta+Ctrl+G/C/M/D/L/T/F`) or cycle with `Meta+Ctrl+Shift+L`.
 
 ### `centerTile` (default; cap = 9)
 
@@ -103,6 +103,10 @@ Master column anchored to the **left** at `MasterWidth` fraction (default `0.5`)
 
 Mirror of `leftTile` — master column anchored to the **right**; non-master area (with the same 1- or 2-column rules) to the left. All spec details identical to `leftTile` with the horizontal axis flipped.
 
+### `floating` (no tiling)
+
+Escape hatch layout: Kwilt does nothing to windows on any (output, virtualDesktop) whose layout is `floating`. New windows land wherever the WM would normally place them and stay there. Existing windows retain their geometry from the previous layout. Master pin, per-window `Meta+\` float toggle, and mouse-resize splits do not apply on floating keys. Switching back to a tiling layout (`Meta+Ctrl+G/C/M/D/L/T`) reclaims every eligible window on that key and tiles them at the tail of the queue.
+
 ### Shared behavior
 
 - Only `normalWindow` top-levels tile. Dialogs, popups, fullscreen, multi-desktop windows stay floating.
@@ -121,7 +125,7 @@ Two equivalent paths — both read/write `~/.config/kwinrc` under `[Script-kwilt
 
 | Key | Type | Default | Range | Notes |
 |---|---|---|---|---|
-| `Layout` | string | `centerTile` | `centerTile` / `autoGrid` / `monocle` / `dual` / `leftTile` / `rightTile` | Default layout for new (output, virtualDesktop) combos. Runtime per-key overrides via `Meta+Ctrl+G/C/M/D/L/T` and cycle via `Meta+Ctrl+Shift+L` act on the active (output, virtualDesktop) only. |
+| `Layout` | string | `centerTile` | `centerTile` / `autoGrid` / `monocle` / `dual` / `leftTile` / `rightTile` / `floating` | Default layout for new (output, virtualDesktop) combos. Runtime per-key overrides via `Meta+Ctrl+G/C/M/D/L/T/F` and cycle via `Meta+Ctrl+Shift+L` act on the active (output, virtualDesktop) only. |
 | `CapAutoGrid` | int | `12` | `0`–`12` | Visible cap before knockout in autoGrid. `0` = unlimited; falls back to `12` (geometry defined for N=1..12). |
 | `CapCenterTile` | int | `9` | `0`–`9` | Visible cap before knockout in centerTile. `0` = unlimited; falls back to `9` (geometry defined for N=1..9). |
 | `CapLeftTile` | int | `9` | `0`–`12` | Visible cap before knockout in leftTile. `0` = unlimited — leftTile scales to arbitrary N. |
@@ -233,7 +237,9 @@ Re-runnable safely. After running, log out and back in once if a shortcut doesn'
 | `Meta+Ctrl+D` | Set layout on active (output, virtualDesktop): dual |
 | `Meta+Ctrl+L` | Set layout on active (output, virtualDesktop): leftTile |
 | `Meta+Ctrl+T` | Set layout on active (output, virtualDesktop): rightTile (T because Meta+Ctrl+R is claimed by Spectacle's Rectangular Region screenshot) |
+| `Meta+Ctrl+F` | Set layout on active (output, virtualDesktop): floating (nothing on that key tiles until switched back) |
 | `Meta+S` | Toggle master pin on active window (claims the master slot on its output/desktop; session-only) |
+| `Meta+\` | Toggle float on active window (opts the window out of tiling until toggled off; session-only) |
 | `Meta+Ctrl+Shift+R` | Rebuild tile queues from current windows (ghost-slot recovery) |
 | `Meta+Left/Right/Up/Down` | Focus tile in that direction |
 | `Meta+Shift+Left/Right/Up/Down` | Swap focused window with neighbor in that direction |
