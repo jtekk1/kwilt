@@ -17,6 +17,7 @@ module.exports = [
         print: "readonly",
         registerShortcut: "readonly",
         readConfig: "readonly",
+        callDBus: "readonly",
       },
     },
   },

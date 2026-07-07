@@ -73,6 +73,42 @@ const CFG = (function () {
   };
 })();
 
+// Persistence: KWin scripts have readConfig but no writeConfig, so runtime
+// state (MasterWidth writes from mouse resize, per-key layout overrides, row
+// splits, inter-column splits) can only be persisted through an external
+// helper. `dev.jtekk.KwiltConfigWriter` is a small Python daemon (installed
+// by scripts/install-persistence.sh) that receives Write(key, value) calls
+// and shells out to kwriteconfig6. If the daemon isn't installed, callDBus
+// silently fails and state stays session-only — Kwilt still works, changes
+// just don't survive a script reload.
+const PERSIST_BUS   = "dev.jtekk.KwiltConfigWriter";
+const PERSIST_PATH  = "/dev/jtekk/KwiltConfigWriter";
+const PERSIST_IFACE = "dev.jtekk.KwiltConfigWriter";
+
+function saveConfig(key, value) {
+  if (typeof callDBus !== "function") return;
+  callDBus(PERSIST_BUS, PERSIST_PATH, PERSIST_IFACE, "Write",
+           String(key), String(value));
+}
+
+// Parse a persisted JSON-object blob into a Map. Empty / missing / malformed
+// entries fall back to an empty Map — matching the "no persisted state"
+// default without special-casing at every read site.
+function readJsonMap(key) {
+  const raw = cfg(key, "");
+  if (!raw) return new Map();
+  try {
+    const obj = JSON.parse(String(raw));
+    if (!obj || typeof obj !== "object") return new Map();
+    const m = new Map();
+    for (const k of Object.keys(obj)) m.set(k, obj[k]);
+    return m;
+  } catch (e) {
+    log("readJsonMap(" + key + ") parse failed: " + e);
+    return new Map();
+  }
+}
+
 // Layout choice is per-(output, virtualDesktop). `layouts` holds explicit
 // per-key overrides; missing entries fall back to CFG.layout (the
 // kwinrc-tunable global default). setLayoutFor / cycleLayout mutate a
@@ -179,6 +215,62 @@ function rowSplitFor(queueKey, layout, column, expectedRows) {
   const rs = rowSplits.get(rowSplitKey(queueKey, layout, column));
   return (rs && rs.length === expectedRows) ? rs : null;
 }
+
+// Serialize the whole Map to a JSON object under one kwinrc key. Cheap for
+// the sizes we deal with (dozens of entries at worst); the alternative of
+// one config key per entry needs a separate enumeration mechanism because
+// KWin's readConfig can't list keys — the blob is simpler.
+function serializeMap(m, valueOk) {
+  const obj = {};
+  m.forEach(function (v, k) {
+    if (!valueOk || valueOk(v)) obj[k] = v;
+  });
+  return JSON.stringify(obj);
+}
+
+function savePerKeyLayouts() {
+  saveConfig("PerKeyLayoutsJson",
+             serializeMap(layouts, function (v) { return typeof v === "string"; }));
+}
+
+function saveRowSplitsAll() {
+  saveConfig("RowSplitsJson",
+             serializeMap(rowSplits, function (v) { return Array.isArray(v); }));
+}
+
+function saveInterColSplitsAll() {
+  saveConfig("InterColSplitsJson",
+             serializeMap(interColSplits, function (v) { return typeof v === "number"; }));
+}
+
+// Hydrate session Maps from persisted state written by prior sessions via the
+// KwiltConfigWriter helper. Runs at script load, before init() retiles.
+// PerKeyLayoutsJson entries are validated against VALID_LAYOUTS so a stale
+// or renamed layout doesn't strand a queue on an unknown mode.
+(function hydrate() {
+  const persistedLayouts = readJsonMap("PerKeyLayoutsJson");
+  persistedLayouts.forEach(function (v, k) {
+    if (typeof v === "string" && VALID_LAYOUTS.indexOf(v) !== -1) layouts.set(k, v);
+  });
+
+  const persistedRowSplits = readJsonMap("RowSplitsJson");
+  persistedRowSplits.forEach(function (v, k) {
+    if (Array.isArray(v)) rowSplits.set(k, v);
+  });
+
+  const persistedInterCol = readJsonMap("InterColSplitsJson");
+  persistedInterCol.forEach(function (v, k) {
+    if (typeof v === "number") interColSplits.set(k, v);
+  });
+
+  const restored = persistedLayouts.size + persistedRowSplits.size + persistedInterCol.size;
+  if (restored > 0) {
+    log("hydrated persisted state: " +
+        persistedLayouts.size + " layout(s), " +
+        persistedRowSplits.size + " row-split(s), " +
+        persistedInterCol.size + " inter-col split(s)");
+  }
+})();
 
 // Turn row ratios (or an equal-split fallback) into concrete {y, h} pairs
 // summing to totalH. The last row absorbs floor-rounding remainder so the
@@ -1124,7 +1216,8 @@ function tryUpdateMasterWidth(ctx, fg) {
   const clamped = clamp(masterFrac, 0.15, 0.85);
   if (Math.abs(clamped - CFG.masterWidth) < 0.005) return false;
   CFG.masterWidth = clamped;
-  log("masterWidth = " + clamped.toFixed(3) + " (in-memory)");
+  saveConfig("MasterWidth", clamped.toString());
+  log("masterWidth = " + clamped.toFixed(3));
   return true;
 }
 
@@ -1178,7 +1271,8 @@ function tryUpdateRowSplit(ctx, fg) {
   ratios[meta.row]    = newDragged;
   ratios[neighborRow] = newNeighbor;
   rowSplits.set(rowSplitKey(ctx.key, layout, meta.column), ratios);
-  log("rowSplit[" + layout + "|" + meta.column + "] row " + meta.row + " → " + newDragged.toFixed(3) + " (in-memory)");
+  saveRowSplitsAll();
+  log("rowSplit[" + layout + "|" + meta.column + "] row " + meta.row + " → " + newDragged.toFixed(3));
   return true;
 }
 
@@ -1227,7 +1321,8 @@ function tryUpdateInterColSplit(ctx, fg) {
   const cur = interColSplitFor(ctx.key, layout);
   if (Math.abs(clamped - cur) < 0.005) return false;
   interColSplits.set(interColSplitKey(ctx.key, layout), clamped);
-  log("interColSplit[" + layout + "] = " + clamped.toFixed(3) + " (in-memory)");
+  saveInterColSplitsAll();
+  log("interColSplit[" + layout + "] = " + clamped.toFixed(3));
   return true;
 }
 
@@ -1286,6 +1381,7 @@ function setLayoutFor(key, name) {
   if (name === layoutFor(key)) return;
   if (name === CFG.layout) layouts.delete(key);
   else layouts.set(key, name);
+  savePerKeyLayouts();
   log("layout[" + key + "]=" + name + " cap=" + CAPS[name]);
   retileKey(key);
 }
@@ -1452,6 +1548,24 @@ function init() {
   // leftTile / rightTile scale to arbitrary N and don't warn.
   if (CFG.capAutoGrid   === 0) log("CapAutoGrid=0 (unlimited) → falls back to 12 (autoGrid geometry defined for N=1..12)");
   if (CFG.capCenterTile === 0) log("CapCenterTile=0 (unlimited) → falls back to 9 (centerTile geometry defined for N=1..9)");
+
+  // Ping the persistence helper. Fire-and-forget with a callback: if the
+  // service isn't installed (or the daemon crashed), the callback fires
+  // with a null / non-string reply and we log the missing-helper hint.
+  // Kwilt still works either way — the state just doesn't survive reload.
+  if (typeof callDBus === "function") {
+    callDBus(PERSIST_BUS, PERSIST_PATH, PERSIST_IFACE, "Ping",
+             function (reply) {
+               if (reply === "pong") {
+                 log("persistence helper reachable (" + PERSIST_BUS + ")");
+               } else {
+                 log("persistence helper not detected; state changes will " +
+                     "NOT persist across script reload. " +
+                     "Run scripts/install-persistence.sh to enable.");
+               }
+             });
+  }
+
   const existing = workspace.windowList ? workspace.windowList() : (workspace.clientList ? workspace.clientList() : []);
   for (const w of existing) {
     // _kwiltBound is a Qt dynamic property that persists across script

@@ -144,6 +144,24 @@ kwriteconfig6 --file kwinrc --group Script-kwilt --key MasterWidth 0.6
 Out-of-range values are clamped to the listed range. Invalid `Layout` strings fall back to `centerTile`.
 - Geometry snaps. Visual transitions rely on KDE's built-in desktop effects (System Settings → Workspace Behavior → Desktop Effects).
 
+## Persistence (optional helper)
+
+By default, everything you tune at runtime — `MasterWidth` back-solved from a mouse resize, per-(output, virtualDesktop) layout overrides set via `Meta+Ctrl+G/C/M/D/L/T`, row splits, inter-column splits — lives **in memory only** and is lost when the script reloads (login, KCM save, `./dev-reload.sh`). KWin's script API exposes `readConfig` but not `writeConfig`, so a KWin script can't persist these on its own.
+
+Kwilt ships a small helper daemon that fills the gap. It registers `dev.jtekk.KwiltConfigWriter` on the session bus and shells out to `kwriteconfig6` when Kwilt calls it over D-Bus. Install once per user:
+
+```sh
+scripts/install-persistence.sh
+```
+
+Requires `python3-dbus` (Fedora / Debian / Arch: `python3-dbus`; Fedora Kinoite: `rpm-ostree install python3-dbus` + reboot) and `kwriteconfig6` (comes with Plasma 6). The installer writes:
+
+- `~/.local/share/kwilt/kwilt-config-writer.py` — the daemon.
+- `~/.local/share/dbus-1/services/dev.jtekk.KwiltConfigWriter.service` — D-Bus activation.
+- `~/.config/systemd/user/kwilt-config-writer.service` — systemd unit.
+
+Then enables the unit. Kwilt logs `persistence helper reachable` on next reload; if you skip the install, it logs `persistence helper not detected` and continues in session-only mode. Uninstall with `scripts/install-persistence.sh --uninstall`.
+
 ## Install
 
 **As a user — packaged release.** Grab the latest `.kwinscript` from the [Releases tab](../../releases) and install it:

@@ -17,3 +17,7 @@ commit.txt
 
 # Personal scratch backlog — not for the repo.
 todo.md
+
+# Python bytecode from local py_compile / import of scripts/*.py
+__pycache__/
+*.pyc
