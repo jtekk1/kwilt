@@ -97,6 +97,22 @@ for old_file in "${old_desktop_dir}"/ixtli-spawn-*.desktop; do
 done
 shopt -u nullglob
 
+# Retired kwilt launchers (slug no longer installed by step 4). Without this
+# sweep the old .desktop file + shortcut group would keep binding its key
+# alongside the replacement entry. kglobalaccel mirrors the active binding
+# into a nested [services][<id>] group at runtime — that copy is the one
+# that actually claims the key, so it must be swept too.
+retired_slugs=(
+    helium    # replaced by chromium (Meta+Shift+T)
+)
+for slug in "${retired_slugs[@]}"; do
+    old_id="kwilt-spawn-${slug}.desktop"
+    kgs --group "$old_id" --key "_k_friendly_name" --delete '' 2>/dev/null || true
+    kgs --group "$old_id" --key "_launch" --delete '' 2>/dev/null || true
+    kgs --group services --group "$old_id" --key "_launch" --delete '' 2>/dev/null || true
+    rm -f "${old_desktop_dir}/${old_id}"
+done
+
 # --- 4. App launcher .desktop files + kglobalshortcutsrc bindings ---
 
 desktop_dir="${HOME}/.local/share/applications"
@@ -136,19 +152,19 @@ install_launcher "htop"      "Launch htop"            "Meta+Shift+H"       "kitt
 install_launcher "impala"    "Launch impala"          "Meta+Shift+I"       "kitty --title 800x600 impala"
 install_launcher "spotify"   "Launch Spotify"         "Meta+Shift+M"       "spotify-launcher"
 install_launcher "nvim"      "Launch nvim"            "Meta+Shift+N"       "kitty --title 1280x900 nvim"
-install_launcher "helium"    "Launch Helium"          "Meta+Shift+T"       "helium"
+install_launcher "chromium"  "Launch Chromium"        "Meta+Shift+T"       "chromium"
 install_launcher "bluetui"   "Launch bluetui"         "Meta+Shift+U"       "kitty --title 800x600 bluetui"
 install_launcher "wiremix"   "Launch wiremix"         "Meta+Shift+W"       "kitty --title 800x600 wiremix"
 install_launcher "yazi"      "Launch yazi"            "Meta+Shift+Y"       "kitty --title 1280x900 yazi"
 
 # Webapps (Meta+Alt)
-install_launcher "audible"   "Audible webapp"         "Meta+Alt+A"         "helium --app=https://www.audible.com"
-install_launcher "discord"   "Discord webapp"         "Meta+Alt+D"         "helium --app=https://discord.com"
-install_launcher "gemini"    "Gemini webapp"          "Meta+Alt+G"         "helium --app=https://gemini.google.com/gem/a2e9c5b0e7e1"
-install_launcher "netflix"   "Netflix webapp"         "Meta+Alt+N"         "helium --app=https://netflix.com"
-install_launcher "upwork"    "Upwork webapp"          "Meta+Alt+U"         "helium --app=https://upwork.com"
-install_launcher "youtube"   "YouTube webapp"         "Meta+Alt+Y"         "helium --app=https://youtube.com"
-install_launcher "nerdfonts" "Nerd Fonts cheatsheet"  "Ctrl+Shift+Space"   "helium --app=https://www.nerdfonts.com/cheat-sheet"
+install_launcher "audible"   "Audible webapp"         "Meta+Alt+A"         "chromium --app=https://www.audible.com"
+install_launcher "discord"   "Discord webapp"         "Meta+Alt+D"         "chromium --app=https://discord.com"
+install_launcher "gemini"    "Gemini webapp"          "Meta+Alt+G"         "chromium --app=https://gemini.google.com/gem/a2e9c5b0e7e1"
+install_launcher "netflix"   "Netflix webapp"         "Meta+Alt+N"         "chromium --app=https://netflix.com"
+install_launcher "upwork"    "Upwork webapp"          "Meta+Alt+U"         "chromium --app=https://upwork.com"
+install_launcher "youtube"   "YouTube webapp"         "Meta+Alt+Y"         "chromium --app=https://youtube.com"
+install_launcher "nerdfonts" "Nerd Fonts cheatsheet"  "Ctrl+Shift+Space"   "chromium --app=https://www.nerdfonts.com/cheat-sheet"
 
 # --- 5. Refresh KDE service cache so the .desktop files are pickable ---
 
