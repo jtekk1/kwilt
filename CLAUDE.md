@@ -11,9 +11,10 @@ The README is the canonical spec of what each layout looks like and what behavio
 ## Dev loop
 
 ```sh
-./dev-reload.sh                  # reload with the LAYOUT currently in main.js
-./dev-reload.sh grid             # sed-rewrite LAYOUT → "autoGrid", then reload
-./dev-reload.sh center           # sed-rewrite LAYOUT → "centerTile", then reload
+./dev-reload.sh                  # reload with the currently configured layout
+./dev-reload.sh grid             # kwinrc [Script-kwilt] Layout=autoGrid, then reload
+./dev-reload.sh center           # kwinrc [Script-kwilt] Layout=centerTile, then reload
+./dev-reload.sh <layout>         # any canonical layout name, then reload
 ./dev-stop.sh                    # unload (stop + teardown in one D-Bus call)
 
 journalctl -f QT_CATEGORY=js QT_CATEGORY=kwin_scripting   # tail logs; look for "[kwilt]"
@@ -99,7 +100,7 @@ The group name `Script-kwilt` is what KWin's `readConfig` infers from `KPlugin.I
 
 **Per-(output, virtualDesktop) queues.** State lives in `queues: Map<string, Window[]>`, keyed by `outputId|desktopId`. Within each queue, the **last `CAP` entries are visible and tiled**; everything before that is "knocked out" (minimized). Eviction is FIFO. Activating a knocked-out window (`onActivated`) promotes it to the end of its queue and the new-oldest is knocked out. `CAP` is per-layout — `autoGrid: 12` and `centerTile: 9` are user-tunable (`CapAutoGrid` / `CapCenterTile`); `monocle: 1` and `dual: 2` are fixed because the cap *is* the layout's defining property. Changing a tunable cap requires understanding the matching layout's geometry function.
 
-**Layout switching is runtime, with a build-time default.** `LAYOUT` is a `let` at the top of `main.js` (CAP follows it). `cycleLayout()` mutates both and calls `retileAll()`; it's wired to `Meta+Ctrl+Shift+L` via `registerShortcut` in `init()`. `registerShortcut` is a KWin-injected global (also gated by `typeof` in case a build doesn't expose it). The `./dev-reload.sh grid|center` sed-rewrite path still works — it now sets the boot-time default rather than the only mode. Important: `sed -i` writes-and-renames, which would break a symlink — `dev-reload.sh` therefore sed's the **project file**, not the symlinked install path. Both point at the same inode via the symlink when one is set up.
+**Layout switching is runtime, with a config-time default.** The boot layout comes from kwinrc `[Script-kwilt]` `Layout` (read once at init via `cfg("Layout", "centerTile")` and validated against `LAYOUT_NAMES`); there is no layout variable left in the source. `cycleLayout()` switches at runtime and calls `retileAll()`; it's wired to `Meta+Ctrl+Shift+L` via `registerShortcut` in `init()`. `registerShortcut` is a KWin-injected global (also gated by `typeof` in case a build doesn't expose it). `./dev-reload.sh grid|center|<layout>` writes the kwinrc key via `kwriteconfig6` and reloads — its layout list must be kept in sync with `LAYOUT_NAMES` in `main.js`.
 
 **Event flow.**
 - `init()` snapshots existing windows via `workspace.windowList()` (with `clientList()` fallback for older KWin), wires `workspace.windowAdded / windowRemoved / windowActivated / screensChanged / desktopLayoutChanged`, then retiles all queues.

@@ -5,9 +5,13 @@
 # Dev reload for the Kwilt KWin script.
 #
 # Usage:
-#   ./dev-reload.sh           # reload with current LAYOUT
-#   ./dev-reload.sh grid      # switch to autoGrid, then reload
-#   ./dev-reload.sh center    # switch to centerTile, then reload
+#   ./dev-reload.sh             # reload with the currently configured layout
+#   ./dev-reload.sh grid        # set Layout=autoGrid in kwinrc, then reload
+#   ./dev-reload.sh center      # set Layout=centerTile in kwinrc, then reload
+#   ./dev-reload.sh <layout>    # any canonical layout name, then reload
+#
+# The boot layout lives in kwinrc [Script-kwilt] Layout (read by cfg() at
+# script init), not in main.js — switching writes user config, not source.
 
 set -euo pipefail
 
@@ -29,25 +33,40 @@ if [ ! -f "$INSTALLED_PATH" ]; then
     exit 1
 fi
 
-# Optional layout switch. We sed the project file directly, not the symlink,
-# because `sed -i` writes-and-renames and would break a symlink.
+# Optional layout switch — writes kwinrc [Script-kwilt] Layout, which cfg()
+# reads at script init. Keep this list in sync with LAYOUT_NAMES in main.js.
+LAYOUT_NAMES=(autoGrid centerTile monocle dual leftTile rightTile floating)
+
+set_layout() {
+    kwriteconfig6 --file kwinrc --group Script-kwilt --key Layout "$1"
+}
+
 case "${1:-}" in
     "")
         ;;
     grid)
-        sed -i 's|^let LAYOUT = "[^"]*"|let LAYOUT = "autoGrid"|' "$MAIN_JS"
+        set_layout "autoGrid"
         ;;
     center)
-        sed -i 's|^let LAYOUT = "[^"]*"|let LAYOUT = "centerTile"|' "$MAIN_JS"
+        set_layout "centerTile"
         ;;
     *)
-        echo "unknown layout: $1" >&2
-        echo "usage: $0 [grid|center]" >&2
-        exit 1
+        for name in "${LAYOUT_NAMES[@]}"; do
+            if [ "$1" = "$name" ]; then
+                set_layout "$name"
+                break
+            fi
+        done
+        if [ "$1" != "$name" ]; then
+            echo "unknown layout: $1" >&2
+            echo "usage: $0 [grid|center|$(IFS='|'; echo "${LAYOUT_NAMES[*]}")]" >&2
+            exit 1
+        fi
         ;;
 esac
 
-current_layout=$(grep -oP '^let LAYOUT = "\K[^"]+' "$MAIN_JS" || echo "?")
+current_layout=$(kreadconfig6 --file kwinrc --group Script-kwilt \
+    --key Layout --default centerTile)
 
 # Unload. Returns "b false" if the script wasn't loaded — that's fine.
 busctl --user call org.kde.KWin /Scripting \

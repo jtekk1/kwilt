@@ -189,13 +189,14 @@ The repo symlink and the `kpackagetool6` install **conflict** at the same path �
 ## Dev loop
 
 ```sh
-./dev-reload.sh          # reload with current LAYOUT
+./dev-reload.sh          # reload with the currently configured layout
 ./dev-reload.sh grid     # switch to autoGrid, then reload
 ./dev-reload.sh center   # switch to centerTile, then reload
+./dev-reload.sh <layout> # any canonical layout name, then reload
 ./dev-stop.sh            # stop and unload
 ```
 
-`dev-reload.sh` with a layout argument sed-rewrites the `LAYOUT` declaration in `main.js`, then reloads — so the source reflects the boot default (and `git diff` shows what you last ran). Runtime switching is via the `Meta+Ctrl+Shift+L` shortcut.
+`dev-reload.sh` with a layout argument writes `Layout` to kwinrc's `[Script-kwilt]` group via `kwriteconfig6`, then reloads — the same key the Configure dialog saves, so what you last ran is what boots next login. Runtime switching is via the `Meta+Ctrl+Shift+L` shortcut.
 
 Important: KWin's `loadScript` over D-Bus **registers but doesn't start** the script — `run` must be called on the per-script object. `dev-reload.sh` handles this; `dev-stop.sh` calls `unloadScript`, which stops and removes in one call.
 
