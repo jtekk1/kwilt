@@ -47,12 +47,13 @@ if ! command -v python3 >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! python3 -c "import dbus" >/dev/null 2>&1; then
-    echo "error: python3-dbus (dbus-python) is required." >&2
-    echo "  Fedora:     sudo dnf install python3-dbus" >&2
-    echo "  Kinoite:    rpm-ostree install python3-dbus  (needs reboot)" >&2
-    echo "  Debian/Ubu: sudo apt install python3-dbus" >&2
-    echo "  Arch:       sudo pacman -S python-dbus" >&2
+if ! python3 -c "import dbus, gi" >/dev/null 2>&1; then
+    echo "error: dbus-python and PyGObject are required." >&2
+    echo "  Fedora:     sudo dnf install python3-dbus python3-gobject" >&2
+    echo "  Kinoite:    rpm-ostree install python3-dbus python3-gobject  (needs reboot)" >&2
+    echo "  NixOS:      use (python3.withPackages (ps: [ ps.dbus-python ps.pygobject3 ]))" >&2
+    echo "  Debian/Ubu: sudo apt install python3-dbus python3-gi" >&2
+    echo "  Arch:       sudo pacman -S python-dbus python-gobject" >&2
     exit 1
 fi
 
@@ -86,7 +87,7 @@ mkdir -p "${dbus_dir}"
 cat > "${dbus_service}" <<DBUS
 [D-BUS Service]
 Name=${BUS_NAME}
-Exec=/usr/bin/python3 ${daemon_dst}
+Exec=/usr/bin/env python3 ${daemon_dst}
 SystemdService=${UNIT_NAME}
 DBUS
 
@@ -102,7 +103,9 @@ After=graphical-session.target
 [Service]
 Type=dbus
 BusName=${BUS_NAME}
-ExecStart=/usr/bin/python3 ${daemon_dst}
+# /usr/bin/env: python3 has no stable absolute path on NixOS, and /usr/bin
+# only ships env there. Resolves via the unit's PATH on every distro.
+ExecStart=/usr/bin/env python3 ${daemon_dst}
 Restart=on-failure
 RestartSec=2
 
