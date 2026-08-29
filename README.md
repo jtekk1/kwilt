@@ -230,9 +230,43 @@ journalctl -f QT_CATEGORY=js QT_CATEGORY=kwin_scripting
 
 Look for `[kwilt]` lines. The KWin Scripting Console (`Alt+F2` → `wm console`) is also available for one-off experiments; its output goes to the same journal stream.
 
-## Known gaps
+## Roadmap to 1.0
 
-- Knocked-out pile has no tab UI yet (needs a companion Plasma/Quickshell widget — KWin scripts can't render arbitrary UI).
+Remaining work before the KDE Store submission, roughly in order:
+
+**Features**
+
+- [ ] Shortcuts reference tab in the config dialog (read-only — bindings stay
+      editable in System Settings → Shortcuts; the generic KCM can't edit
+      kglobalaccel entries).
+- [ ] Knocked-out pile widget: a plasmoid (Plasma Shell widget) showing the
+      minimized pile for its screen's (output, virtualDesktop), click to
+      promote. KWin scripts can't render UI, so this is a companion
+      `Plasma/Applet` package — pure QML using `org.kde.taskmanager`'s
+      `TasksModel` (minimized windows per screen/desktop; activating one
+      already triggers Kwilt's promote path, so v1 needs no custom IPC).
+- [ ] Keyboard master-resize: grow/shrink `MasterWidth` in steps from the
+      keyboard (mouse edge-drag already works).
+- [ ] Send-window-to-screen keybinding (or documented rebind of Plasma's own —
+      `setup-shortcuts.sh` currently disables it to free `Meta+Shift+arrows`
+      for swap, leaving multi-monitor users without a keyboard move).
+- [ ] KDE Activities: decide — exclude windows outside the current activity
+      from tiling, or document Activities as unsupported. Queues currently
+      ignore activities entirely.
+
+**Release**
+
+- [ ] Custom icon for the store listing (replace the stock KWin-script icon).
+- [ ] Screenshot set covering the layout families (including the vertical
+      layouts, the widget, and gaps).
+- [ ] Finalize the store listing text (`scratchpad/kde-store-description.md` →
+      `docs/`, converted to what store.kde.org renders).
+- [ ] End-to-end packaged-install test: `npm run package`, remove the dev
+      symlink, `npm run install:local`, verify script + config dialog +
+      `setup-shortcuts.sh` + `install-persistence.sh` from the packaged copy.
+- [ ] Bump `KPlugin.Version` to `1.0.0`, tag a GitHub release with the
+      `.kwinscript` attached, submit to the KDE Store (the widget ships as its
+      own `.plasmoid` artifact and *Plasma Widgets* store listing).
 
 ## Shortcuts
 
