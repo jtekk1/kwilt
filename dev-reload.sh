@@ -35,7 +35,7 @@ fi
 
 # Optional layout switch — writes kwinrc [Script-kwilt] Layout, which cfg()
 # reads at script init. Keep this list in sync with LAYOUT_NAMES in main.js.
-LAYOUT_NAMES=(autoGrid centerTile monocle dual leftTile rightTile floating)
+LAYOUT_NAMES=(autoGrid centerTile verticalCenter monocle dual verticalDual leftTile rightTile topTile bottomTile floating)
 
 set_layout() {
     kwriteconfig6 --file kwinrc --group Script-kwilt --key Layout "$1"

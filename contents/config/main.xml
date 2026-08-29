@@ -35,6 +35,12 @@
             <max>9</max>
         </entry>
 
+        <entry name="CapVerticalCenter" type="Int">
+            <default>9</default>
+            <min>0</min>
+            <max>9</max>
+        </entry>
+
         <entry name="CapLeftTile" type="Int">
             <default>9</default>
             <min>0</min>
@@ -42,6 +48,18 @@
         </entry>
 
         <entry name="CapRightTile" type="Int">
+            <default>9</default>
+            <min>0</min>
+            <max>12</max>
+        </entry>
+
+        <entry name="CapTopTile" type="Int">
+            <default>9</default>
+            <min>0</min>
+            <max>12</max>
+        </entry>
+
+        <entry name="CapBottomTile" type="Int">
             <default>9</default>
             <min>0</min>
             <max>12</max>
@@ -69,6 +87,10 @@
             <default>0</default>
             <min>0</min>
             <max>80</max>
+        </entry>
+
+        <entry name="AutoRotatePortrait" type="Bool">
+            <default>true</default>
         </entry>
 
         <entry name="BorderlessWhenTiled" type="Bool">

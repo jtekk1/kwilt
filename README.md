@@ -22,7 +22,9 @@ Personal KWin tiling script.
 
 ## Layouts
 
-Seven layouts are implemented. Choose the default via `Layout` in the config UI (System Settings → Window Management → KWin Scripts → Kwilt → Configure), or via `kwriteconfig6 --file kwinrc --group Script-kwilt --key Layout <name>`. Set on the active (output, virtualDesktop) at runtime via the layout shortcuts (`Meta+Ctrl+G/C/M/D/L/T/F`) or cycle with `Meta+Ctrl+Shift+L`.
+Eleven layouts are implemented. Choose the default via `Layout` in the config UI (System Settings → Window Management → KWin Scripts → Kwilt → Configure), or via `kwriteconfig6 --file kwinrc --group Script-kwilt --key Layout <name>`. Set on the active (output, virtualDesktop) at runtime via the layout shortcuts (see the Shortcuts table) or cycle with `Meta+Ctrl+Shift+L`.
+
+The vertical layouts (`verticalCenter`, `verticalDual`, `topTile`, `bottomTile`) run the matching horizontal layout's geometry transposed (x/y and width/height swapped), so every spec detail below carries over with the axes flipped. Independently, `AutoRotatePortrait` (default on) renders `autoGrid` / `centerTile` / `dual` transposed on portrait outputs, so the landscape-designed layouts fit tall screens without picking a different layout name.
 
 ### `centerTile` (default; cap = 9)
 
@@ -40,6 +42,10 @@ Center column at `MasterWidth` fraction of the work area (default `0.5`), side c
 | 8 | center / 4 left (quarters) / 3 right (thirds) — asymmetric, left fills first |
 | 9 | center / 4 left (quarters) / 4 right (quarters) |
 | 10+ | oldest knocked out — visible cap is 9 (`CapCenterTile = 0` also falls back to 9; geometry defined for N=1..9) |
+
+### `verticalCenter` (cap = 9 default, tunable)
+
+`centerTile` transposed: master **row** spans the vertical center at `MasterWidth` fraction of the work-area **height**; non-masters fill the top and bottom rows (top fills first, mirroring centerTile's left-first), each side splitting into more side-by-side cells as it grows. All centerTile spec details apply with the axes flipped. Visible cap is `CapVerticalCenter` (default 9; `0` falls back to 9).
 
 ### `autoGrid` (cap = 12)
 
@@ -80,6 +86,10 @@ At most two windows visible, side-by-side. Adding a 3rd window knocks out the ol
 | 2 | left half / right half |
 | 3+ | oldest is knocked out — visible cap is 2 |
 
+### `verticalDual` (cap = 2)
+
+`dual` transposed: at most two windows visible, stacked **top half / bottom half**. Same knockout behavior as `dual`. Useful as a deck-style paired view on any orientation, and the natural two-window split on portrait monitors.
+
 ### `leftTile` (cap = 9 default, tunable)
 
 Master column anchored to the **left** at `MasterWidth` fraction (default `0.5`); non-master area to the right. Column count in the non-master area is `NonMasterColumns`: `1` = single wide column with equal-height rows; `2` = inner + outer columns with the 2-column fill order below. `0` (default) picks automatically — ultrawide monitors (aspect ratio > 2:1) get 2 columns, everything else gets 1.
@@ -103,9 +113,17 @@ Master column anchored to the **left** at `MasterWidth` fraction (default `0.5`)
 
 Mirror of `leftTile` — master column anchored to the **right**; non-master area (with the same 1- or 2-column rules) to the left. All spec details identical to `leftTile` with the horizontal axis flipped.
 
+### `topTile` (cap = 9 default, tunable)
+
+`leftTile` transposed: master **row** anchored to the **top** at `MasterWidth` fraction of the work-area **height**; non-master windows fill 1 or 2 rows below, placed side by side within each row. `NonMasterColumns` governs the row count; auto mode (`0`) reads the transposed aspect ratio (height/width > 2:1 → 2 rows — i.e. very tall screens). All `leftTile` spec details (fill order, splits, cap semantics via `CapTopTile`) apply with the axes flipped.
+
+### `bottomTile` (cap = 9 default, tunable)
+
+Mirror of `topTile` — master row anchored to the **bottom**; non-master rows above. Transposed `rightTile`; visible cap is `CapBottomTile`.
+
 ### `floating` (no tiling)
 
-Escape hatch layout: Kwilt does nothing to windows on any (output, virtualDesktop) whose layout is `floating`. New windows land wherever the WM would normally place them and stay there. Existing windows retain their geometry from the previous layout. Master pin, per-window `Meta+\` float toggle, and mouse-resize splits do not apply on floating keys. Switching back to a tiling layout (`Meta+Ctrl+G/C/M/D/L/T`) reclaims every eligible window on that key and tiles them at the tail of the queue.
+Escape hatch layout: Kwilt does nothing to windows on any (output, virtualDesktop) whose layout is `floating`. New windows land wherever the WM would normally place them and stay there. Existing windows retain their geometry from the previous layout. Master pin, per-window `Meta+\` float toggle, and mouse-resize splits do not apply on floating keys. Switching back to any tiling layout (direct-set shortcut or cycle) reclaims every eligible window on that key and tiles them at the tail of the queue.
 
 ### Shared behavior
 
@@ -113,8 +131,8 @@ Escape hatch layout: Kwilt does nothing to windows on any (output, virtualDeskto
 - **Master survives cap eviction.** Whoever holds the master slot (`visible[0]`, or the pinned window if `Meta+S` is set) is exempt from cap-based FIFO knockout — overflow knocks out the second-oldest visible (`visible[1]`) instead. Applies to every layout with cap ≥ 2; `monocle` (cap = 1) has no `visible[1]` to sacrifice, so the exemption is a natural no-op there. Master identity tracks the slot: drag-swapping a different window into `visible[0]` promotes it to the new master.
 - Activating a knocked-out window (alt-tab onto it) promotes it back into the visible set; the new-oldest non-master is knocked out in its place.
 - Dragging a tiled window onto another tile swaps them. Drag onto empty/own tile → snap back.
-- **Resizing a tiled window** (e.g. `Meta+Right-drag` on Plasma defaults) adjusts the layout: horizontal edge drags that move the master-vs-non-master boundary update `MasterWidth`; horizontal drags between the inner and outer non-master columns (leftTile / rightTile 2-col mode) update the per-key inter-column split; vertical edge drags update per-column row-height ratios (centerTile side columns and leftTile / rightTile 2-column mode). All writes are in-memory only and reset on script reload; persistence is a shared write-path follow-up. centerTile N=2 shares this behavior (master boundary drag updates `MasterWidth`).
-- **Layout is per-(output, virtualDesktop)**. The layout shortcuts (cycle + direct-set) act on the (output, virtualDesktop) of the currently active window — different monitors and different virtual desktops keep independent layouts. New (output, virtualDesktop) combos inherit the `Layout` config default. Per-key overrides are session-only and reset on script reload.
+- **Resizing a tiled window** (e.g. `Meta+Right-drag` on Plasma defaults) adjusts the layout: edge drags that move the master-vs-non-master boundary update `MasterWidth`; drags between the inner and outer non-master columns (leftTile / rightTile 2-col mode) update the per-key inter-column split; drags along the stacking axis update per-column row-height ratios (centerTile side columns and leftTile / rightTile 2-column mode). On transposed layouts (`verticalCenter` / `verticalDual` / `topTile` / `bottomTile`, or portrait auto-rotation) the same adjustments apply with the axes flipped — e.g. dragging topTile's master boundary vertically updates `MasterWidth`. centerTile N=2 shares this behavior (master boundary drag updates `MasterWidth`). Without the persistence helper these writes are in-memory and reset on script reload; with it they persist to kwinrc (see Persistence below).
+- **Layout is per-(output, virtualDesktop)**. The layout shortcuts (cycle + direct-set) act on the (output, virtualDesktop) of the currently active window — different monitors and different virtual desktops keep independent layouts. New (output, virtualDesktop) combos inherit the `Layout` config default. Per-key overrides reset on script reload unless the persistence helper is installed (see Persistence below).
 
 ## Configuration
 
@@ -126,13 +144,17 @@ Two equivalent paths — both read/write `~/.config/kwinrc` under `[Script-kwilt
 
 | Key | Type | Default | Range | Notes |
 |---|---|---|---|---|
-| `Layout` | string | `centerTile` | `centerTile` / `autoGrid` / `monocle` / `dual` / `leftTile` / `rightTile` / `floating` | Default layout for new (output, virtualDesktop) combos. Runtime per-key overrides via `Meta+Ctrl+G/C/M/D/L/T/F` and cycle via `Meta+Ctrl+Shift+L` act on the active (output, virtualDesktop) only. |
+| `Layout` | string | `centerTile` | any layout name | Default layout for new (output, virtualDesktop) combos. Runtime per-key overrides via the direct-set shortcuts and cycle via `Meta+Ctrl+Shift+L` act on the active (output, virtualDesktop) only. |
 | `CapAutoGrid` | int | `12` | `0`–`12` | Visible cap before knockout in autoGrid. `0` = unlimited; falls back to `12` (geometry defined for N=1..12). |
 | `CapCenterTile` | int | `9` | `0`–`9` | Visible cap before knockout in centerTile. `0` = unlimited; falls back to `9` (geometry defined for N=1..9). |
+| `CapVerticalCenter` | int | `9` | `0`–`9` | Visible cap before knockout in verticalCenter. `0` = unlimited; falls back to `9` (transposed centerTile geometry, N=1..9). |
 | `CapLeftTile` | int | `9` | `0`–`12` | Visible cap before knockout in leftTile. `0` = unlimited — leftTile scales to arbitrary N. |
 | `CapRightTile` | int | `9` | `0`–`12` | Visible cap before knockout in rightTile. `0` = unlimited — rightTile scales to arbitrary N. |
-| `MasterWidth` | float | `0.5` | `0.15`–`0.85` | Master column width as fraction of the work area. Applies to `centerTile` (N≥3, sides derive as `(1 - MasterWidth) / 2` each), `leftTile` (N≥2), `rightTile` (N≥2). At N=1 every layout fills the work area. |
-| `NonMasterColumns` | int | `0` | `0`–`2` | Non-master column count for `leftTile` / `rightTile`. `0` = auto (aspect ratio > 2:1 → 2 columns; else 1). `1` or `2` = explicit override. `centerTile` ignores this — its column layout is intrinsic. |
+| `CapTopTile` | int | `9` | `0`–`12` | Visible cap before knockout in topTile. `0` = unlimited — topTile scales to arbitrary N. |
+| `CapBottomTile` | int | `9` | `0`–`12` | Visible cap before knockout in bottomTile. `0` = unlimited — bottomTile scales to arbitrary N. |
+| `MasterWidth` | float | `0.5` | `0.15`–`0.85` | Master column width (or row height, in transposed layouts) as fraction of the work area. Applies to `centerTile` / `verticalCenter` (N≥3, sides derive as `(1 - MasterWidth) / 2` each) and `leftTile` / `rightTile` / `topTile` / `bottomTile` (N≥2). At N=1 every layout fills the work area. |
+| `NonMasterColumns` | int | `0` | `0`–`2` | Non-master column count for `leftTile` / `rightTile` (row count for `topTile` / `bottomTile`). `0` = auto (aspect ratio in layout space > 2:1 → 2 columns/rows; else 1). `1` or `2` = explicit override. `centerTile` ignores this — its column layout is intrinsic. |
+| `AutoRotatePortrait` | bool | `true` | `true` / `false` | Render `autoGrid` / `centerTile` / `dual` transposed on portrait outputs (columns become rows). The explicit vertical layouts and `leftTile` / `rightTile` are never auto-rotated. |
 | `OuterGap` | int | `0` | `0`–`80` | Pixels between any tile edge and the work area edge. `0` = flush to the screen. |
 | `InnerGap` | int | `0` | `0`–`80` | Pixels between adjacent tiles. Split halved on each side; odd values round consistently so adjacent gaps sum exactly. |
 | `BorderlessWhenTiled` | bool | `false` | `true` / `false` | Hide window decorations on visible tiles by setting `noBorder`. Original border state is saved per-window and restored on untrack/close/fullscreen. |
@@ -232,13 +254,17 @@ Re-runnable safely. After running, log out and back in once if a shortcut doesn'
 
 | Default | Action |
 |---|---|
-| `Meta+Ctrl+Shift+L` | Cycle layout on the active (output, virtualDesktop): autoGrid → centerTile → monocle → dual |
+| `Meta+Ctrl+Shift+L` | Cycle layout on the active (output, virtualDesktop) through all eleven layouts |
 | `Meta+Ctrl+G` | Set layout on active (output, virtualDesktop): autoGrid |
 | `Meta+Ctrl+C` | Set layout on active (output, virtualDesktop): centerTile |
+| `Meta+Ctrl+Shift+C` | Set layout on active (output, virtualDesktop): verticalCenter |
 | `Meta+Ctrl+M` | Set layout on active (output, virtualDesktop): monocle |
 | `Meta+Ctrl+D` | Set layout on active (output, virtualDesktop): dual |
+| `Meta+Ctrl+Shift+D` | Set layout on active (output, virtualDesktop): verticalDual |
 | `Meta+Ctrl+L` | Set layout on active (output, virtualDesktop): leftTile |
 | `Meta+Ctrl+T` | Set layout on active (output, virtualDesktop): rightTile (T because Meta+Ctrl+R is claimed by Spectacle's Rectangular Region screenshot) |
+| `Meta+Ctrl+U` | Set layout on active (output, virtualDesktop): topTile (U for "up") |
+| `Meta+Ctrl+B` | Set layout on active (output, virtualDesktop): bottomTile |
 | `Meta+Ctrl+F` | Set layout on active (output, virtualDesktop): floating (nothing on that key tiles until switched back) |
 | `Meta+S` | Toggle master pin on active window (claims the master slot on its output/desktop; session-only) |
 | `Meta+\` | Toggle float on active window (opts the window out of tiling until toggled off; session-only) |
