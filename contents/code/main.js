@@ -46,7 +46,7 @@ function clamp(value, min, max) {
 // functions, which depend on CFG). CFG-build-time and hydrate-time both
 // need name validation before `LAYOUTS` exists; a runtime drift-check
 // right after `LAYOUTS` is defined catches divergence.
-const LAYOUT_NAMES = ["autoGrid", "centerTile", "monocle", "dual", "leftTile", "rightTile", "floating"];
+const LAYOUT_NAMES = ["autoGrid", "centerTile", "verticalCenter", "monocle", "dual", "verticalDual", "leftTile", "rightTile", "topTile", "bottomTile", "floating"];
 
 const CFG = (function () {
   const layoutRaw = cfg("Layout", "centerTile");
@@ -62,15 +62,24 @@ const CFG = (function () {
     // (see capFor for fallback semantics); leftTile/rightTile scale freely.
     capAutoGrid:        Math.round(clamp(cfg("CapAutoGrid", 12),        0, 12)),
     capCenterTile:      Math.round(clamp(cfg("CapCenterTile", 9),       0, 9)),
+    capVerticalCenter:  Math.round(clamp(cfg("CapVerticalCenter", 9),   0, 9)),
     capLeftTile:        Math.round(clamp(cfg("CapLeftTile", 9),         0, 12)),
     capRightTile:       Math.round(clamp(cfg("CapRightTile", 9),        0, 12)),
+    capTopTile:         Math.round(clamp(cfg("CapTopTile", 9),          0, 12)),
+    capBottomTile:      Math.round(clamp(cfg("CapBottomTile", 9),       0, 12)),
     // Unified master column fraction — used by centerTile (N>=3),
     // leftTile (N>=2), rightTile (N>=2). Sides derive as (1 - master) / 2.
     masterWidth:                    clamp(cfg("MasterWidth", 0.5),      0.15, 0.85),
-    // Non-master column count for leftTile/rightTile. 0 = auto (ultrawide
-    // aspect ratio > 2.0 -> 2 cols, else 1); 1 or 2 = explicit override.
-    // centerTile ignores this (its column layout is intrinsic).
+    // Non-master column count for leftTile/rightTile (and row count for
+    // topTile/bottomTile, which run the same math transposed). 0 = auto
+    // (aspect ratio > 2.0 in layout space -> 2 cols/rows, else 1); 1 or 2 =
+    // explicit override. centerTile ignores this (columns are intrinsic).
     nonMasterColumns:   Math.round(clamp(cfg("NonMasterColumns", 0),    0, 2)),
+    // Portrait outputs: render autoGrid / centerTile / dual transposed
+    // (columns become rows) so the landscape-designed layouts fit tall
+    // screens. topTile / bottomTile are transposed by definition and
+    // leftTile / rightTile never are, so neither is affected by this flag.
+    autoRotatePortrait:                 cfg("AutoRotatePortrait", true),
     outerGap:           Math.round(clamp(cfg("OuterGap", 0),  0, 80)),
     innerGap:           Math.round(clamp(cfg("InnerGap", 0),  0, 80)),
     borderlessWhenTiled:                cfg("BorderlessWhenTiled", false),
@@ -404,6 +413,17 @@ function allWindows() {
 
 function rect(x, y, w, h) { return { x: x, y: y, width: w, height: h }; }
 
+// Transpose helpers — the vertical layouts (topTile / bottomTile) and the
+// portrait auto-rotation reuse the horizontal geometry math by running it in
+// a swapped coordinate space (x <-> y, width <-> height) and mapping the
+// resulting rects back. The swap is an involution, so the same functions
+// convert in both directions; area offsets survive because the transposed
+// area's origin is the swapped real origin.
+function transposeRect(r) { return rect(r.y, r.x, r.height, r.width); }
+function transposeArea(a) { return { x: a.y, y: a.x, width: a.height, height: a.width }; }
+
+function isPortrait(area) { return area.height > area.width; }
+
 // autoGrid — pattern: while N is below the next perfect MxM grid, W1 spans
 // the full left column; once N hits the perfect grid, every cell equalizes.
 // 2x2 frame for N=3/4, 2x3 frame for N=5/6, 3x3 frame for N=7/8/9.
@@ -587,7 +607,7 @@ function geometriesAutoGrid(n, area) {
 //   slot 5 → next left-column slot       (W6)
 //   slot 6 → next right-column slot      (W7)
 // Side columns grow top-down: 1 tile → split halves → split thirds.
-function geometriesCenterTile(n, area, queueKey) {
+function geometriesCenterTileImpl(n, area, queueKey, layoutName) {
   const x = area.x, y = area.y, w = area.width, h = area.height;
   if (n <= 0) return [];
 
@@ -620,8 +640,8 @@ function geometriesCenterTile(n, area, queueKey) {
 
   const leftRows  = order.left.length;
   const rightRows = order.right.length;
-  const leftRatios  = queueKey ? rowSplitFor(queueKey, "centerTile", "left",  leftRows)  : null;
-  const rightRatios = queueKey ? rowSplitFor(queueKey, "centerTile", "right", rightRows) : null;
+  const leftRatios  = queueKey ? rowSplitFor(queueKey, layoutName, "left",  leftRows)  : null;
+  const rightRatios = queueKey ? rowSplitFor(queueKey, layoutName, "right", rightRows) : null;
   const leftRects   = computeRowRects(h, leftRows,  leftRatios);
   const rightRects  = computeRowRects(h, rightRows, rightRatios);
 
@@ -634,6 +654,20 @@ function geometriesCenterTile(n, area, queueKey) {
     tiles[slot] = rect(rightX, y + rightRects[i].y, sideW, rightRects[i].h);
   });
   return tiles;
+}
+
+function geometriesCenterTile(n, area, key) {
+  return geometriesCenterTileImpl(n, area, key, "centerTile");
+}
+
+// verticalCenter — centerTile transposed as an explicit layout choice:
+// master ROW spans the vertical center at MasterWidth fraction of the
+// HEIGHT; non-masters fill the top and bottom rows (transposed "left"
+// column = top row, "right" = bottom), each side splitting into more
+// columns as it grows. Split state is keyed "verticalCenter" so it never
+// collides with centerTile state on the same queue key.
+function geometriesVerticalCenter(n, area, key) {
+  return geometriesCenterTileImpl(n, transposeArea(area), key, "verticalCenter").map(transposeRect);
 }
 
 // Monocle — one visible window at full work area. CAP=1 knocks out the rest;
@@ -655,6 +689,14 @@ function geometriesDual(n, area) {
   ];
 }
 
+// verticalDual — dual stacked: at most two visible windows, top half /
+// bottom half. Explicit layout usable on any orientation; plain `dual`
+// also renders this shape on portrait outputs when AutoRotatePortrait is
+// on.
+function geometriesVerticalDual(n, area) {
+  return geometriesDual(n, transposeArea(area)).map(transposeRect);
+}
+
 // Shared geometry for leftTile (masterOnLeft=true) and rightTile
 // (masterOnLeft=false). Master column anchored to one side at
 // CFG.masterWidth * area.width; non-master area on the other side splits
@@ -672,12 +714,15 @@ function geometriesDual(n, area) {
 //
 // N=1 fills the full area (matches centerTile N=1 and the "1 window = full"
 // user spec). n_nm == 1 in 2-col mode collapses to one wide column.
-function geometriesSideTile(n, area, masterOnLeft, queueKey) {
+function geometriesSideTile(n, area, masterOnLeft, queueKey, layoutName) {
   if (n <= 0) return [];
   const x = area.x, y = area.y, w = area.width, h = area.height;
   if (n === 1) return [rect(x, y, w, h)];
 
-  const layout = masterOnLeft ? "leftTile" : "rightTile";
+  // layoutName keys the split-state maps (rowSplits / interColSplits) so the
+  // transposed callers (topTile / bottomTile) keep state separate from the
+  // horizontal layouts on the same queue key.
+  const layout = layoutName;
   const n_nm = n - 1;
   const masterW = Math.floor(CFG.masterWidth * w);
   const nmW = w - masterW;
@@ -736,8 +781,35 @@ function geometriesSideTile(n, area, masterOnLeft, queueKey) {
   return tiles;
 }
 
-function geometriesLeftTile(n, area, key)  { return geometriesSideTile(n, area, true,  key); }
-function geometriesRightTile(n, area, key) { return geometriesSideTile(n, area, false, key); }
+function geometriesLeftTile(n, area, key)  { return geometriesSideTile(n, area, true,  key, "leftTile");  }
+function geometriesRightTile(n, area, key) { return geometriesSideTile(n, area, false, key, "rightTile"); }
+
+// topTile / bottomTile — sideTile transposed: master ROW pinned to the top
+// (topTile) or bottom (bottomTile) at MasterWidth fraction of the HEIGHT;
+// non-master windows fill 1 or 2 rows on the other side, placed side by side
+// within each row. NonMasterColumns governs the row count (auto mode reads
+// the transposed aspect ratio: height/width > 2:1 -> 2 rows).
+function geometriesTopTile(n, area, key) {
+  return geometriesSideTile(n, transposeArea(area), true, key, "topTile").map(transposeRect);
+}
+function geometriesBottomTile(n, area, key) {
+  return geometriesSideTile(n, transposeArea(area), false, key, "bottomTile").map(transposeRect);
+}
+
+// Portrait auto-rotation: autoGrid / centerTile / dual are designed for
+// landscape — on a portrait output their columns become uselessly narrow
+// strips. When AutoRotatePortrait is on (default) and the work area is
+// taller than wide, run the geometry transposed: autoGrid's columns become
+// rows, centerTile's center column becomes a center row with top/bottom
+// stacks, dual stacks its two halves. monocle / floating are orientation-
+// agnostic; leftTile / rightTile / topTile / bottomTile are explicit
+// orientation choices and never auto-rotate.
+function withPortraitTranspose(fn) {
+  return function (n, area, key) {
+    if (!CFG.autoRotatePortrait || !isPortrait(area)) return fn(n, area, key);
+    return fn(n, transposeArea(area), key).map(transposeRect);
+  };
+}
 
 // floating — no tile geometry. isTileable returns false for any window on a
 // key whose layout is "floating", so the queue is empty and applyQueue never
@@ -769,13 +841,17 @@ function geometriesFloating() { return []; }
 // only hit at call time — long after this const-in-var-clothing is
 // initialized — but const-in-TDZ triggers a warning per hit at reload.
 var LAYOUTS = {
-  autoGrid:   { geometries: geometriesAutoGrid,   cap: CFG.capAutoGrid,   maxN: 12,   tiles: true,  shortcut: "Meta+Ctrl+G", shortcutId: "KwiltLayoutGrid"     },
-  centerTile: { geometries: geometriesCenterTile, cap: CFG.capCenterTile, maxN: 9,    tiles: true,  shortcut: "Meta+Ctrl+C", shortcutId: "KwiltLayoutCenter"   },
-  monocle:    { geometries: geometriesMonocle,    cap: 1,                 maxN: null, tiles: true,  shortcut: "Meta+Ctrl+M", shortcutId: "KwiltLayoutMonocle"  },
-  dual:       { geometries: geometriesDual,       cap: 2,                 maxN: null, tiles: true,  shortcut: "Meta+Ctrl+D", shortcutId: "KwiltLayoutDual"     },
-  leftTile:   { geometries: geometriesLeftTile,   cap: CFG.capLeftTile,   maxN: null, tiles: true,  shortcut: "Meta+Ctrl+L", shortcutId: "KwiltLayoutLeft"     },
-  rightTile:  { geometries: geometriesRightTile,  cap: CFG.capRightTile,  maxN: null, tiles: true,  shortcut: "Meta+Ctrl+T", shortcutId: "KwiltLayoutRight"    },
-  floating:   { geometries: geometriesFloating,   cap: 0,                 maxN: null, tiles: false, shortcut: "Meta+Ctrl+F", shortcutId: "KwiltLayoutFloating" },
+  autoGrid:       { geometries: withPortraitTranspose(geometriesAutoGrid),   cap: CFG.capAutoGrid,       maxN: 12,   tiles: true,  shortcut: "Meta+Ctrl+G",       shortcutId: "KwiltLayoutGrid"           },
+  centerTile:     { geometries: withPortraitTranspose(geometriesCenterTile), cap: CFG.capCenterTile,     maxN: 9,    tiles: true,  shortcut: "Meta+Ctrl+C",       shortcutId: "KwiltLayoutCenter"         },
+  verticalCenter: { geometries: geometriesVerticalCenter, cap: CFG.capVerticalCenter, maxN: 9,    tiles: true,  shortcut: "Meta+Ctrl+Shift+C", shortcutId: "KwiltLayoutVerticalCenter" },
+  monocle:        { geometries: geometriesMonocle,        cap: 1,                     maxN: null, tiles: true,  shortcut: "Meta+Ctrl+M",       shortcutId: "KwiltLayoutMonocle"        },
+  dual:           { geometries: withPortraitTranspose(geometriesDual),       cap: 2,  maxN: null, tiles: true,  shortcut: "Meta+Ctrl+D",       shortcutId: "KwiltLayoutDual"           },
+  verticalDual:   { geometries: geometriesVerticalDual,   cap: 2,                     maxN: null, tiles: true,  shortcut: "Meta+Ctrl+Shift+D", shortcutId: "KwiltLayoutVerticalDual"   },
+  leftTile:       { geometries: geometriesLeftTile,       cap: CFG.capLeftTile,       maxN: null, tiles: true,  shortcut: "Meta+Ctrl+L",       shortcutId: "KwiltLayoutLeft"           },
+  rightTile:      { geometries: geometriesRightTile,      cap: CFG.capRightTile,      maxN: null, tiles: true,  shortcut: "Meta+Ctrl+T",       shortcutId: "KwiltLayoutRight"          },
+  topTile:        { geometries: geometriesTopTile,        cap: CFG.capTopTile,        maxN: null, tiles: true,  shortcut: "Meta+Ctrl+U",       shortcutId: "KwiltLayoutTop"            },
+  bottomTile:     { geometries: geometriesBottomTile,     cap: CFG.capBottomTile,     maxN: null, tiles: true,  shortcut: "Meta+Ctrl+B",       shortcutId: "KwiltLayoutBottom"         },
+  floating:       { geometries: geometriesFloating,       cap: 0,                     maxN: null, tiles: false, shortcut: "Meta+Ctrl+F",       shortcutId: "KwiltLayoutFloating"       },
 };
 
 // Drift check: LAYOUT_NAMES is used by the CFG/hydrate early validation and
@@ -1238,8 +1314,48 @@ function captureResizeCtx(w) {
 // writeConfig, so new values survive until the next script reload (login,
 // KCM save, dev cycle). Persistence via kwriteconfig6-through-callDBus is
 // a follow-up — same write-path problem as the 0.8.0 anchor.
+
+// Layouts whose geometry is transposed base-layout math, mapped to the base
+// layout name the solvers branch on. Split-state keys keep the REAL layout
+// name (ctx.stateLayout) so solver reads/writes hit the same rowSplits /
+// interColSplits entries the geometry functions use.
+const TRANSPOSED_BASE = {
+  topTile:        "leftTile",
+  bottomTile:     "rightTile",
+  verticalCenter: "centerTile",
+  verticalDual:   "dual",
+};
+
+// True when the layout was RENDERED transposed for this area — either a
+// vertical layout, or a portrait-auto-rotated one (must mirror the
+// withPortraitTranspose wrapping in LAYOUTS).
+function renderedTransposed(layout, area) {
+  if (TRANSPOSED_BASE[layout]) return true;
+  if (!CFG.autoRotatePortrait || !isPortrait(area)) return false;
+  return layout === "autoGrid" || layout === "centerTile" || layout === "dual";
+}
+
 function handleResize(w, ctx) {
-  const fg = w.frameGeometry;
+  const liveFg = w.frameGeometry;
+  let fg = { x: liveFg.x, y: liveFg.y, width: liveFg.width, height: liveFg.height };
+
+  // Transposed rendering (topTile / bottomTile, or portrait auto-rotation):
+  // swap the drag geometry and context into the horizontal coordinate space
+  // the solvers are written in. MasterWidth / row-split / inter-column
+  // back-solves then fall out of the same math.
+  if (renderedTransposed(ctx.layout, ctx.area)) {
+    ctx = {
+      layout: TRANSPOSED_BASE[ctx.layout] || ctx.layout,
+      stateLayout: ctx.layout,
+      key: ctx.key,
+      slotIdx: ctx.slotIdx,
+      n: ctx.n,
+      area: transposeArea(ctx.area),
+      startFg: transposeRect(ctx.startFg),
+    };
+    fg = transposeRect(fg);
+  }
+
   const startFg = ctx.startFg;
 
   // Skip drags that didn't materially move either dimension (< 2 px).
@@ -1373,9 +1489,10 @@ function tryUpdateRowSplit(ctx, fg) {
     return false;
   }
 
+  const stateLayout = ctx.stateLayout || layout;
   const totalH = ctx.area.height;
   const deltaRatio = (fg.height - startFg.height) / totalH;
-  const currentRatios = rowSplitFor(ctx.key, layout, meta.column, meta.colRows);
+  const currentRatios = rowSplitFor(ctx.key, stateLayout, meta.column, meta.colRows);
   const ratios = currentRatios ? currentRatios.slice()
                                : Array.from({length: meta.colRows}, function () { return 1 / meta.colRows; });
 
@@ -1386,9 +1503,9 @@ function tryUpdateRowSplit(ctx, fg) {
 
   ratios[meta.row]    = newDragged;
   ratios[neighborRow] = newNeighbor;
-  rowSplits.set(rowSplitKey(ctx.key, layout, meta.column), ratios);
+  rowSplits.set(rowSplitKey(ctx.key, stateLayout, meta.column), ratios);
   saveRowSplitsAll();
-  log("rowSplit[" + layout + "|" + meta.column + "] row " + meta.row + " → " + newDragged.toFixed(3));
+  log("rowSplit[" + stateLayout + "|" + meta.column + "] row " + meta.row + " → " + newDragged.toFixed(3));
   return true;
 }
 
@@ -1433,12 +1550,13 @@ function tryUpdateInterColSplit(ctx, fg) {
   const newInnerFrac = meta.column === "inner" ? colFrac : 1 - colFrac;
 
   const MIN = 0.1;
+  const stateLayout = ctx.stateLayout || layout;
   const clamped = clamp(newInnerFrac, MIN, 1 - MIN);
-  const cur = interColSplitFor(ctx.key, layout);
+  const cur = interColSplitFor(ctx.key, stateLayout);
   if (Math.abs(clamped - cur) < 0.005) return false;
-  interColSplits.set(interColSplitKey(ctx.key, layout), clamped);
+  interColSplits.set(interColSplitKey(ctx.key, stateLayout), clamped);
   saveInterColSplitsAll();
-  log("interColSplit[" + layout + "] = " + clamped.toFixed(3));
+  log("interColSplit[" + stateLayout + "] = " + clamped.toFixed(3));
   return true;
 }
 
