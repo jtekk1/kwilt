@@ -259,8 +259,8 @@ Remaining work before the KDE Store submission, roughly in order:
 - [ ] Custom icon for the store listing (replace the stock KWin-script icon).
 - [ ] Screenshot set covering the layout families (including the vertical
       layouts, the widget, and gaps).
-- [ ] Finalize the store listing text (`scratchpad/kde-store-description.md` →
-      `docs/`, converted to what store.kde.org renders).
+- [ ] Finalize the store listing text (`docs/kde-store-description.md`,
+      converted to what store.kde.org renders).
 - [ ] End-to-end packaged-install test: `npm run package`, remove the dev
       symlink, `npm run install:local`, verify script + config dialog +
       `setup-shortcuts.sh` + `install-persistence.sh` from the packaged copy.
