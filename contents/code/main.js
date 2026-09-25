@@ -1207,6 +1207,9 @@ function bindWindow(w) {
     w.interactiveMoveResizeStarted.connect(function () {
       w._kwiltDragMode = w.move ? "move" : (w.resize ? "resize" : null);
       w._kwiltResizeCtx = w._kwiltDragMode === "resize" ? captureResizeCtx(w) : null;
+      // Meta+drag on an inactive window doesn't raise it, so it would slide
+      // under the active one. Raise without stealing focus.
+      if (typeof workspace.raiseWindow === "function") workspace.raiseWindow(w);
     });
   }
   if (w.interactiveMoveResizeFinished) {
