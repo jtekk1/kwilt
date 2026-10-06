@@ -172,9 +172,9 @@ function effectiveNonMasterColumns(area) {
 // App-launcher shortcuts are NOT registered here. KWin scripts can't spawn
 // processes (no exec/spawn API; callDBus → systemd-run doesn't marshal the
 // nested-variant ExecStart arg). Launcher bindings live in KDE's native
-// Custom Shortcuts mechanism and are seeded by scripts/setup-shortcuts.sh
-// (which also clears Plasma KWin defaults like Quick Tile that conflict
-// with the window-mgmt shortcuts below).
+// Custom Shortcuts mechanism and are seeded by scripts/setup-launchers.sh.
+// scripts/setup-shortcuts.sh clears the Plasma KWin defaults (Quick Tile
+// etc.) that conflict with the window-mgmt shortcuts below.
 
 // Map<string, Window[]>: key = `${outputId}|${desktopId}`
 const queues = new Map();
@@ -1823,6 +1823,18 @@ function resizeByDirection(direction) {
   if (!resizeFromGeometry(ctx, fg)) log("resize " + direction + ": no adjustable edge (or at its limit)");
 }
 
+// Monitors (Meta+Alt+arrows focus, Meta+Alt+Shift+arrows move the active
+// window). KWin's own directional screen slots do the work; a moved window
+// fires outputChanged, and migrate() re-tiles both screens. `typeof` guard:
+// older builds may not expose these slots on the scripting workspace.
+function screenAction(slotName) {
+  if (typeof workspace[slotName] !== "function") {
+    log(slotName + " unavailable in this KWin build");
+    return;
+  }
+  workspace[slotName]();
+}
+
 function cycleFocus() {
   const w = workspace.activeWindow;
   if (!w) return;
@@ -1978,6 +1990,18 @@ function init() {
   registerShortcut("KwiltResizeRight", "Kwilt: Grow window width",    "Meta+Ctrl+Alt+Right", function () { resizeByDirection("right"); });
   registerShortcut("KwiltResizeUp",    "Kwilt: Shrink window height", "Meta+Ctrl+Alt+Up",    function () { resizeByDirection("up");    });
   registerShortcut("KwiltResizeDown",  "Kwilt: Grow window height",   "Meta+Ctrl+Alt+Down",  function () { resizeByDirection("down");  });
+
+  // Monitors: same "Shift takes the window along" rule as Plasma's
+  // Meta+Ctrl(+Shift)+arrows for virtual desktops. Meta+Alt+arrows is
+  // claimed by Plasma's Switch Window by default; setup-shortcuts.sh clears it.
+  registerShortcut("KwiltFocusScreenLeft",  "Kwilt: Focus screen left",  "Meta+Alt+Left",  function () { screenAction("slotSwitchToLeftScreen");  });
+  registerShortcut("KwiltFocusScreenRight", "Kwilt: Focus screen right", "Meta+Alt+Right", function () { screenAction("slotSwitchToRightScreen"); });
+  registerShortcut("KwiltFocusScreenUp",    "Kwilt: Focus screen up",    "Meta+Alt+Up",    function () { screenAction("slotSwitchToAboveScreen"); });
+  registerShortcut("KwiltFocusScreenDown",  "Kwilt: Focus screen down",  "Meta+Alt+Down",  function () { screenAction("slotSwitchToBelowScreen"); });
+  registerShortcut("KwiltMoveScreenLeft",   "Kwilt: Move window to screen left",  "Meta+Alt+Shift+Left",  function () { screenAction("slotWindowToLeftScreen");  });
+  registerShortcut("KwiltMoveScreenRight",  "Kwilt: Move window to screen right", "Meta+Alt+Shift+Right", function () { screenAction("slotWindowToRightScreen"); });
+  registerShortcut("KwiltMoveScreenUp",     "Kwilt: Move window to screen up",    "Meta+Alt+Shift+Up",    function () { screenAction("slotWindowToAboveScreen"); });
+  registerShortcut("KwiltMoveScreenDown",   "Kwilt: Move window to screen down",  "Meta+Alt+Shift+Down",  function () { screenAction("slotWindowToBelowScreen"); });
 
   // Focus history. Meta+Tab is claimed by KWin's Walk Through Windows
   // (alongside Alt+Tab) — setup-shortcuts.sh strips just the Meta+Tab half.
