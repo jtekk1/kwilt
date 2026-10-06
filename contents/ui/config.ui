@@ -12,6 +12,11 @@
   entry of the same name. Save in the dialog writes kwinrc; main.js reads
   the same values via cfg() at the next reload.
 
+  Two tabs: Settings (the kcfg-bound form) and Shortcuts, a read-only
+  reference of the default keys. Global shortcuts live in kglobalaccel, not
+  kwinrc, so this dialog can't edit them; keep the table in sync with the
+  registerShortcut calls in main.js.
+
   Discovery requires metadata.json to declare:
     "X-KDE-ConfigModule": "kwin/effects/configs/kcm_kwin4_genericscripted"
 -->
@@ -29,6 +34,12 @@
   <property name="windowTitle">
    <string>Kwilt</string>
   </property>
+  <layout class="QVBoxLayout" name="rootLayout">
+   <item>
+    <widget class="QTabWidget" name="tabs">
+     <property name="currentIndex"><number>0</number></property>
+     <widget class="QWidget" name="settingsTab">
+      <attribute name="title"><string>Settings</string></attribute>
   <layout class="QFormLayout" name="formLayout">
 
    <item row="0" column="0">
@@ -249,6 +260,34 @@
     </widget>
    </item>
 
+  </layout>
+     </widget>
+     <widget class="QWidget" name="shortcutsTab">
+      <attribute name="title"><string>Shortcuts</string></attribute>
+      <layout class="QVBoxLayout" name="shortcutsLayout">
+       <item>
+        <widget class="QLabel" name="shortcutsIntro">
+         <property name="text"><string>These are Kwilt's &lt;b&gt;default&lt;/b&gt; keys. To change one, open &lt;b&gt;System Settings → Shortcuts&lt;/b&gt; and search for “Kwilt”. A default only takes effect if no other shortcut holds that key: Plasma's Quick Tile (Meta+Arrows), Move Window to Screen (Meta+Shift+Left/Right), Switch Window (Meta+Alt+Arrows) and the Meta+Tab half of Walk Through Windows clash out of the box. Clear them there, or run &lt;code&gt;scripts/setup-shortcuts.sh&lt;/code&gt; from the Kwilt repository.</string></property>
+         <property name="textFormat"><enum>Qt::RichText</enum></property>
+         <property name="wordWrap"><bool>true</bool></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QScrollArea" name="shortcutsScroll">
+         <property name="widgetResizable"><bool>true</bool></property>
+         <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+         <widget class="QLabel" name="shortcutsTable">
+          <property name="text"><string>&lt;table cellspacing="0" cellpadding="2"&gt;&lt;tr&gt;&lt;td colspan="2" style="padding-top:8px"&gt;&lt;b&gt;Layouts (active screen + desktop)&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+Shift+L&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Cycle through all layouts&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+G&lt;/code&gt;&lt;/td&gt;&lt;td&gt;autoGrid&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+C&lt;/code&gt;&lt;/td&gt;&lt;td&gt;centerTile&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+Shift+C&lt;/code&gt;&lt;/td&gt;&lt;td&gt;verticalCenter&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+M&lt;/code&gt;&lt;/td&gt;&lt;td&gt;monocle&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+D&lt;/code&gt;&lt;/td&gt;&lt;td&gt;dual&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+Shift+D&lt;/code&gt;&lt;/td&gt;&lt;td&gt;verticalDual&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+L&lt;/code&gt;&lt;/td&gt;&lt;td&gt;leftTile&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+T&lt;/code&gt;&lt;/td&gt;&lt;td&gt;rightTile&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+U&lt;/code&gt;&lt;/td&gt;&lt;td&gt;topTile&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+B&lt;/code&gt;&lt;/td&gt;&lt;td&gt;bottomTile&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+F&lt;/code&gt;&lt;/td&gt;&lt;td&gt;floating (stop tiling here)&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td colspan="2" style="padding-top:8px"&gt;&lt;b&gt;Focus and swap&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Arrows&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Focus the tile in that direction&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Shift+Arrows&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Swap with the tile in that direction&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Tab&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Cycle focus through visible tiles&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+U&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Focus the previously focused window&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td colspan="2" style="padding-top:8px"&gt;&lt;b&gt;Resize (step: Keyboard resize step)&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+Alt+Right / Left&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Grow / shrink the active tile&amp;#x27;s width&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+Alt+Down / Up&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Grow / shrink the active tile&amp;#x27;s height&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td colspan="2" style="padding-top:8px"&gt;&lt;b&gt;Monitors&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Alt+Arrows&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Focus the monitor in that direction&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Alt+Shift+Arrows&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Move the active window to that monitor&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td colspan="2" style="padding-top:8px"&gt;&lt;b&gt;Window&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+S&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Pin the active window as master&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+\&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Float / un-float the active window&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+Shift+R&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Rebuild tile queues (recovery)&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td colspan="2" style="padding-top:8px"&gt;&lt;b&gt;Virtual desktops (Plasma&amp;#x27;s own shortcuts)&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+Arrows&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Switch to the desktop in that direction&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style="padding-right:16px"&gt;&lt;code&gt;Meta+Ctrl+Shift+Arrows&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Move the active window to that desktop&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</string></property>
+          <property name="textFormat"><enum>Qt::RichText</enum></property>
+          <property name="alignment"><set>Qt::AlignLeft|Qt::AlignTop</set></property>
+          <property name="textInteractionFlags"><set>Qt::TextSelectableByMouse</set></property>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
   </layout>
  </widget>
  <resources/>
