@@ -56,6 +56,17 @@ Move / swap:
   Meta + Shift + Arrows      swap with the neighbor in that direction
   Drag tile onto tile        swap positions (drag onto empty / own tile → snaps back)
 
+Resize:
+  Meta + Ctrl + Alt + Right/Left   grow / shrink the active tile's width
+  Meta + Ctrl + Alt + Down/Up      grow / shrink the active tile's height
+  (step size: ResizeStep, 5% of the screen by default)
+
+Desktops and monitors (Plasma's own actions; adding Shift takes the window with you):
+  Meta + Ctrl + Arrows             switch virtual desktop (Plasma default)
+  Meta + Ctrl + Shift + Arrows     move the window to that desktop (Plasma default)
+  Meta + Alt + Arrows              focus the monitor in that direction
+  Meta + Alt + Shift + Arrows      move the window to that monitor
+
 Master & float:
   Meta + S                   toggle master pin on the active window
   Meta + \                   toggle float on the active window (opt out of tiling)
@@ -63,11 +74,11 @@ Master & float:
 Utility:
   Meta + Ctrl + Shift + R    rebuild tile queues from current windows (ghost-slot recovery)
 
-Shortcut conflicts: Plasma's defaults already use Meta+Arrows (Quick Tile), Meta+Shift+Left/Right (Move Window to Screen) and Meta+Tab (Walk Through Windows). While those are bound, Kwilt's focus and swap keys can't claim them. Clear or rebind those Plasma entries in System Settings → Shortcuts → KWin, or pick different keys for Kwilt's entries there.
+Shortcut conflicts: Plasma's defaults already use Meta+Arrows (Quick Tile), Meta+Shift+Left/Right (Move Window to Screen), Meta+Alt+Arrows (Switch Window) and Meta+Tab (Walk Through Windows). While those are bound, Kwilt's focus and swap keys can't claim them. Clear or rebind those Plasma entries in System Settings → Shortcuts → KWin, or pick different keys for Kwilt's entries there. The monitor keys are Plasma's "Switch to Screen to the Left/Right/Above/Below" and "Window One Screen to the Left/Right/Up/Down", unbound by default — bind them there to the keys above.
 
 Mouse resize
 
-Resizing a tiled window (Meta+Right-drag on Plasma defaults, or grab the border) adjusts the layout in place. The window you're moving or resizing is raised above the others while you drag.
+Resizing a tiled window (Meta+Right-drag on Plasma defaults, or grab the border) adjusts the layout in place. Meta+Ctrl+Alt+Arrows makes the same adjustments from the keyboard. The window you're moving or resizing is raised above the others while you drag.
 
 Master boundary — the edge between master and non-master area → updates MasterWidth (unified across centerTile, leftTile, rightTile and their vertical versions).
 Inter-column boundary — between the inner and outer non-master columns in leftTile / rightTile 2-col mode → updates the per-key inter-column split.
@@ -88,6 +99,7 @@ Tunables live in kwinrc [Script-kwilt] and ship with a Configure dialog in Syste
 Layout — default layout for new (output, virtualDesktop) combos (any of the eleven)
 CapAutoGrid / CapCenterTile / CapVerticalCenter / CapLeftTile / CapRightTile / CapTopTile / CapBottomTile — visible cap before knockout (per layout); 0 = unlimited
 MasterWidth — unified master column (or row) fraction; default 0.5, range 0.15–0.85
+ResizeStep — percent of the screen one keyboard-resize press moves an edge by; default 5, range 1–25
 NonMasterColumns — leftTile / rightTile non-master column count (rows for topTile / bottomTile); 0 = auto (aspect ratio > 2:1 → 2, else 1), or 1 / 2 explicit
 AutoRotatePortrait — turn autoGrid / centerTile / dual on their side on portrait outputs; default on
 OuterGap / InnerGap — pixel gaps between tiles and the work-area edge

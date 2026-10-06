@@ -8,9 +8,12 @@
 #
 #   1. Disables Plasma KWin defaults that collide with Kwilt's window-
 #      management shortcuts (Quick Tile on Meta+arrows, Move Window to
-#      Screen on Meta+Shift+Left/Right, Walk Through Windows' Meta+Tab
-#      half). The Plasma defaults are preserved as the "default" half of
-#      each entry so you can revert via System Settings → Shortcuts.
+#      Screen on Meta+Shift+Left/Right, Switch Window on Meta+Alt+arrows,
+#      Walk Through Windows' Meta+Tab half). The Plasma defaults are
+#      preserved as the "default" half of each entry so you can revert via
+#      System Settings → Shortcuts. Then binds Plasma's own screen actions
+#      to Meta+Alt+arrows (focus a monitor) and Meta+Alt+Shift+arrows (move
+#      the window there).
 #
 #   2. Cleans up stale Ixtli launcher entries left in [kwin] by an
 #      earlier main.js (pre-rename, pre-setup-shortcuts). KWin scripts
@@ -54,6 +57,26 @@ kgs --group kwin --key "Window Quick Tile Top"     "none,Meta+Up,Quick Tile Wind
 kgs --group kwin --key "Window Quick Tile Bottom"  "none,Meta+Down,Quick Tile Window to the Bottom"
 kgs --group kwin --key "Window to Previous Screen" "none,Meta+Shift+Left,Move Window to Previous Screen"
 kgs --group kwin --key "Window to Next Screen"     "none,Meta+Shift+Right,Move Window to Next Screen"
+
+# Switch Window <dir> duplicates Kwilt's Meta+arrows focus; clearing it
+# frees Meta+Alt+arrows for the screen actions below.
+kgs --group kwin --key "Switch Window Left"  "none,Meta+Alt+Left,Switch to Window to the Left"
+kgs --group kwin --key "Switch Window Right" "none,Meta+Alt+Right,Switch to Window to the Right"
+kgs --group kwin --key "Switch Window Up"    "none,Meta+Alt+Up,Switch to Window Above"
+kgs --group kwin --key "Switch Window Down"  "none,Meta+Alt+Down,Switch to Window Below"
+
+# Monitors: Meta+Alt+arrows focuses the screen in that direction, adding
+# Shift takes the active window along — the same Shift rule as Plasma's
+# Meta+Ctrl(+Shift)+arrows for virtual desktops. Plasma ships these
+# unbound, so the default half stays "none".
+kgs --group kwin --key "Switch to Screen to the Left"  "Meta+Alt+Left,none,Switch to Screen to the Left"
+kgs --group kwin --key "Switch to Screen to the Right" "Meta+Alt+Right,none,Switch to Screen to the Right"
+kgs --group kwin --key "Switch to Screen Above"        "Meta+Alt+Up,none,Switch to Screen Above"
+kgs --group kwin --key "Switch to Screen Below"        "Meta+Alt+Down,none,Switch to Screen Below"
+kgs --group kwin --key "Window One Screen to the Left"  "Meta+Alt+Shift+Left,none,Move Window One Screen to the Left"
+kgs --group kwin --key "Window One Screen to the Right" "Meta+Alt+Shift+Right,none,Move Window One Screen to the Right"
+kgs --group kwin --key "Window One Screen Up"           "Meta+Alt+Shift+Up,none,Move Window One Screen Up"
+kgs --group kwin --key "Window One Screen Down"         "Meta+Alt+Shift+Down,none,Move Window One Screen Down"
 
 # Walk Through Windows holds two keys joined by a real tab character:
 # "Alt+Tab<TAB>Meta+Tab". Preserve Alt+Tab (you almost certainly want it)
@@ -173,7 +196,8 @@ if command -v kbuildsycoca6 >/dev/null 2>&1; then
 fi
 
 echo "Kwilt shortcuts configured:"
-echo "  - 8 Plasma KWin defaults disabled (Quick Tile, Move to Screen, Meta+Tab from Walk Through)"
+echo "  - 12 Plasma KWin defaults disabled (Quick Tile, Move to Screen, Switch Window, Meta+Tab from Walk Through)"
+echo "  - 8 Plasma screen actions bound to Meta+Alt+arrows / Meta+Alt+Shift+arrows"
 echo "  - Any pre-rename ixtli-spawn-*.desktop entries removed"
 echo "  - 20 launcher .desktop entries installed under ${desktop_dir}/kwilt-spawn-*.desktop"
 echo "  - All bindings written to ~/.config/kglobalshortcutsrc"
