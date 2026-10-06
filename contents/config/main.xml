@@ -71,6 +71,14 @@
             <max>0.85</max>
         </entry>
 
+        <!-- Percent of the work area one Meta+Ctrl+Alt+arrow press moves a
+             tile edge by. -->
+        <entry name="ResizeStep" type="Int">
+            <default>5</default>
+            <min>1</min>
+            <max>25</max>
+        </entry>
+
         <entry name="NonMasterColumns" type="Int">
             <default>0</default>
             <min>0</min>

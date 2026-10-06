@@ -132,6 +132,7 @@ Escape hatch layout: Kwilt does nothing to windows on any (output, virtualDeskto
 - Activating a knocked-out window (alt-tab onto it) promotes it back into the visible set; the new-oldest non-master is knocked out in its place.
 - Dragging a tiled window onto another tile swaps them. Drag onto empty/own tile → snap back.
 - **Resizing a tiled window** (e.g. `Meta+Right-drag` on Plasma defaults) adjusts the layout: edge drags that move the master-vs-non-master boundary update `MasterWidth`; drags between the inner and outer non-master columns (leftTile / rightTile 2-col mode) update the per-key inter-column split; drags along the stacking axis update per-column row-height ratios (centerTile side columns and leftTile / rightTile 2-column mode). On transposed layouts (`verticalCenter` / `verticalDual` / `topTile` / `bottomTile`, or portrait auto-rotation) the same adjustments apply with the axes flipped — e.g. dragging topTile's master boundary vertically updates `MasterWidth`. centerTile N=2 shares this behavior (master boundary drag updates `MasterWidth`). Without the persistence helper these writes are in-memory and reset on script reload; with it they persist to kwinrc (see Persistence below).
+- **Keyboard resize** (`Meta+Ctrl+Alt+arrows`) makes the same adjustments in steps of `ResizeStep` percent of the work area: `Right` / `Down` grow the active tile, `Left` / `Up` shrink it. Each press moves the tile edge that borders another tile — the right (bottom) edge, or the left (top) edge when the right (bottom) one is the screen edge — exactly as if you'd dragged it. Layouts with no adjustable boundary there (autoGrid, monocle, dual, a lone window) ignore the press.
 - **Layout is per-(output, virtualDesktop)**. The layout shortcuts (cycle + direct-set) act on the (output, virtualDesktop) of the currently active window — different monitors and different virtual desktops keep independent layouts. New (output, virtualDesktop) combos inherit the `Layout` config default. Per-key overrides reset on script reload unless the persistence helper is installed (see Persistence below).
 
 ## Configuration
@@ -153,6 +154,7 @@ Two equivalent paths — both read/write `~/.config/kwinrc` under `[Script-kwilt
 | `CapTopTile` | int | `9` | `0`–`12` | Visible cap before knockout in topTile. `0` = unlimited — topTile scales to arbitrary N. |
 | `CapBottomTile` | int | `9` | `0`–`12` | Visible cap before knockout in bottomTile. `0` = unlimited — bottomTile scales to arbitrary N. |
 | `MasterWidth` | float | `0.5` | `0.15`–`0.85` | Master column width (or row height, in transposed layouts) as fraction of the work area. Applies to `centerTile` / `verticalCenter` (N≥3, sides derive as `(1 - MasterWidth) / 2` each) and `leftTile` / `rightTile` / `topTile` / `bottomTile` (N≥2). At N=1 every layout fills the work area. |
+| `ResizeStep` | int | `5` | `1`–`25` | Percent of the work area one keyboard-resize press (`Meta+Ctrl+Alt+arrows`) moves a tile edge by. |
 | `NonMasterColumns` | int | `0` | `0`–`2` | Non-master column count for `leftTile` / `rightTile` (row count for `topTile` / `bottomTile`). `0` = auto (aspect ratio in layout space > 2:1 → 2 columns/rows; else 1). `1` or `2` = explicit override. `centerTile` ignores this — its column layout is intrinsic. |
 | `AutoRotatePortrait` | bool | `true` | `true` / `false` | Render `autoGrid` / `centerTile` / `dual` transposed on portrait outputs (columns become rows). The explicit vertical layouts and `leftTile` / `rightTile` are never auto-rotated. |
 | `OuterGap` | int | `0` | `0`–`80` | Pixels between any tile edge and the work area edge. `0` = flush to the screen. |
@@ -245,11 +247,9 @@ Remaining work before the KDE Store submission, roughly in order:
       `Plasma/Applet` package — pure QML using `org.kde.taskmanager`'s
       `TasksModel` (minimized windows per screen/desktop; activating one
       already triggers Kwilt's promote path, so v1 needs no custom IPC).
-- [ ] Keyboard master-resize: grow/shrink `MasterWidth` in steps from the
-      keyboard (mouse edge-drag already works).
-- [ ] Send-window-to-screen keybinding (or documented rebind of Plasma's own —
-      `setup-shortcuts.sh` currently disables it to free `Meta+Shift+arrows`
-      for swap, leaving multi-monitor users without a keyboard move).
+- [x] Keyboard resize: `Meta+Ctrl+Alt+arrows`, step set by `ResizeStep`.
+- [x] Send-window-to-screen: Plasma's screen actions bound to
+      `Meta+Alt+(Shift+)arrows` by `setup-shortcuts.sh`.
 - [ ] KDE Activities: decide — exclude windows outside the current activity
       from tiling, or document Activities as unsupported. Queues currently
       ignore activities entirely.
@@ -272,7 +272,7 @@ Remaining work before the KDE Store submission, roughly in order:
 
 Kwilt registers its **window-management** shortcuts directly. **App launchers** live in KDE's native Custom Shortcuts mechanism — KWin scripts can't spawn processes (no exec API; `callDBus` → systemd-run can't marshal the nested-variant `ExecStart` arg cleanly). Both are configured in one shot by `scripts/setup-shortcuts.sh`, which:
 
-1. Disables Plasma KWin defaults that collide with Kwilt's bindings (Quick Tile on `Meta+arrows`, Move Window to Screen on `Meta+Shift+Left/Right`, and the `Meta+Tab` half of Walk Through Windows — `Alt+Tab` is preserved).
+1. Disables Plasma KWin defaults that collide with Kwilt's bindings (Quick Tile on `Meta+arrows`, Move Window to Screen on `Meta+Shift+Left/Right`, Switch Window on `Meta+Alt+arrows`, and the `Meta+Tab` half of Walk Through Windows — `Alt+Tab` is preserved), and binds Plasma's own screen actions to `Meta+Alt+arrows` / `Meta+Alt+Shift+arrows` (see *Desktops and monitors* below).
 2. Installs hidden `.desktop` files under `~/.local/share/applications/kwilt-spawn-*.desktop` for each launcher.
 3. Binds each `.desktop` to a key via `~/.config/kglobalshortcutsrc`.
 
@@ -305,10 +305,25 @@ Re-runnable safely. After running, log out and back in once if a shortcut doesn'
 | `Meta+Ctrl+Shift+R` | Rebuild tile queues from current windows (ghost-slot recovery) |
 | `Meta+Left/Right/Up/Down` | Focus tile in that direction |
 | `Meta+Shift+Left/Right/Up/Down` | Swap focused window with neighbor in that direction |
+| `Meta+Ctrl+Alt+Right/Left` | Grow / shrink the active tile's width by `ResizeStep` |
+| `Meta+Ctrl+Alt+Down/Up` | Grow / shrink the active tile's height by `ResizeStep` |
 | `Meta+Tab` | Cycle focus through visible tiles |
 | `Meta+U` | Focus most-recently-focused window (toggle) |
 
 Rebind in **System Settings → Shortcuts → KWin** (search for `Kwilt:`).
+
+### Desktops and monitors (Plasma built-ins)
+
+Moving between virtual desktops and monitors uses KWin's own actions — Kwilt notices the window's new desktop or output and re-tiles both sides. One rule throughout: **adding `Shift` takes the active window with you.**
+
+| Default | Action | Plasma action (System Settings → Shortcuts → KWin) |
+|---|---|---|
+| `Meta+Ctrl+arrows` | Switch to the virtual desktop in that direction | Switch One Desktop to the Left/Right/Up/Down (Plasma default) |
+| `Meta+Ctrl+Shift+arrows` | Move the active window to that desktop and follow it | Window One Desktop to the Left/Right/Up/Down (Plasma default) |
+| `Meta+Alt+arrows` | Focus the monitor in that direction | Switch to Screen to the Left/Right/Above/Below (bound by `setup-shortcuts.sh`) |
+| `Meta+Alt+Shift+arrows` | Move the active window to the monitor in that direction | Window One Screen to the Left/Right/Up/Down (bound by `setup-shortcuts.sh`) |
+
+Plasma ships `Meta+Alt+arrows` bound to *Switch Window Left/Right/Up/Down*, which duplicates Kwilt's `Meta+arrows` focus; `setup-shortcuts.sh` clears it. To set these up by hand instead, clear that entry and bind the two screen actions in the table.
 
 ### App launchers (via setup-shortcuts.sh)
 
@@ -317,8 +332,8 @@ Rebind in **System Settings → Shortcuts → KWin** (search for `Kwilt:`).
 | `Meta+Return` | `kitty` |
 | `Meta+Shift+Return` | `foot -c $HOME/.config/ThemeSwitcher/foot.ini` |
 | `Meta+/` | `bitwarden` |
-| `Meta+Shift+B/F/H/I/M/N/T/U/W/Y` | btop / spf / htop / impala / spotify / nvim / helium / bluetui / wiremix / yazi (kitty-wrapped where applicable) |
-| `Meta+Alt+A/D/G/N/U/Y` | Helium webapps: Audible / Discord / Gemini / Netflix / Upwork / YouTube |
-| `Ctrl+Shift+Space` | Nerd Fonts cheatsheet (Helium webapp) |
+| `Meta+Shift+B/F/H/I/M/N/T/U/W/Y` | btop / spf / htop / impala / spotify / nvim / chromium / bluetui / wiremix / yazi (kitty-wrapped where applicable) |
+| `Meta+Alt+A/D/G/N/U/Y` | Chromium webapps: Audible / Discord / Gemini / Netflix / Upwork / YouTube |
+| `Ctrl+Shift+Space` | Nerd Fonts cheatsheet (Chromium webapp) |
 
 Rebind in **System Settings → Shortcuts → Custom Shortcuts** (entries named `Kwilt: …`). To remove all launcher bindings, delete the `kwilt-spawn-*.desktop` files and the matching groups in `kglobalshortcutsrc`.

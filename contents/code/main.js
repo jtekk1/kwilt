@@ -70,6 +70,9 @@ const CFG = (function () {
     // Unified master column fraction — used by centerTile (N>=3),
     // leftTile (N>=2), rightTile (N>=2). Sides derive as (1 - master) / 2.
     masterWidth:                    clamp(cfg("MasterWidth", 0.5),      0.15, 0.85),
+    // Keyboard resize (Meta+Ctrl+Alt+arrows): fraction of the work area one
+    // press moves a tile edge by. Configured as a whole percent.
+    resizeStep:         Math.round(clamp(cfg("ResizeStep", 5),          1, 25)) / 100,
     // Non-master column count for leftTile/rightTile (and row count for
     // topTile/bottomTile, which run the same math transposed). 0 = auto
     // (aspect ratio > 2.0 in layout space -> 2 cols/rows, else 1); 1 or 2 =
@@ -1340,8 +1343,13 @@ function renderedTransposed(layout, area) {
 
 function handleResize(w, ctx) {
   const liveFg = w.frameGeometry;
-  let fg = { x: liveFg.x, y: liveFg.y, width: liveFg.width, height: liveFg.height };
+  return resizeFromGeometry(ctx, { x: liveFg.x, y: liveFg.y, width: liveFg.width, height: liveFg.height });
+}
 
+// Shared by mouse resize (handleResize) and keyboard resize
+// (resizeByDirection): `ctx` is a captureResizeCtx-shaped snapshot and `fg`
+// the tile's new geometry, both in screen space.
+function resizeFromGeometry(ctx, fg) {
   // Transposed rendering (topTile / bottomTile, or portrait auto-rotation):
   // swap the drag geometry and context into the horizontal coordinate space
   // the solvers are written in. MasterWidth / row-split / inter-column
@@ -1769,6 +1777,52 @@ function swapByDirection(direction) {
   retileKey(t.slot.found.key);
 }
 
+// Keyboard resize (Meta+Ctrl+Alt+arrows): Right / Down grow the active tile,
+// Left / Up shrink it, by CFG.resizeStep of the work area. It is simulated as
+// an interactive resize of one tile edge and fed through resizeFromGeometry,
+// so every layout, transpose and clamp behaves exactly like a mouse drag. The
+// edge moved is the one bordering another tile: right / bottom by
+// preference, left / top when the right / bottom edge is the work-area edge.
+// Layouts with no adjustable boundary there (autoGrid, monocle, dual, a lone
+// window) no-op.
+function resizeByDirection(direction) {
+  const w = workspace.activeWindow;
+  const slot = tileSlotOf(w);
+  if (!slot) return;
+  const od = outputAndDesk(w);
+  if (!od) return;
+  const area = workArea(od.out, od.desk);
+  const n = slot.tiles.length;
+  // Ungapped layout rect: its edges match the work area exactly, which is
+  // what the edge test below and the solvers' fractions are measured against.
+  const r = geometries(slot.found.key, n, area)[slot.visIdx];
+  if (!r) return;
+
+  const horizontal = direction === "left" || direction === "right";
+  const sign = (direction === "right" || direction === "down") ? 1 : -1;
+  const delta = sign * Math.round((horizontal ? area.width : area.height) * CFG.resizeStep);
+  const fg = { x: r.x, y: r.y, width: r.width, height: r.height };
+  if (horizontal) {
+    if (r.x + r.width < area.x + area.width) fg.width += delta;
+    else if (r.x > area.x) { fg.x -= delta; fg.width += delta; }
+    else { log("resize " + direction + ": tile spans the work area"); return; }
+  } else {
+    if (r.y + r.height < area.y + area.height) fg.height += delta;
+    else if (r.y > area.y) { fg.y -= delta; fg.height += delta; }
+    else { log("resize " + direction + ": tile spans the work area"); return; }
+  }
+
+  const ctx = {
+    layout: layoutFor(slot.found.key),
+    key: slot.found.key,
+    slotIdx: slot.visIdx,
+    area: area,
+    n: n,
+    startFg: { x: r.x, y: r.y, width: r.width, height: r.height },
+  };
+  if (!resizeFromGeometry(ctx, fg)) log("resize " + direction + ": no adjustable edge (or at its limit)");
+}
+
 function cycleFocus() {
   const w = workspace.activeWindow;
   if (!w) return;
@@ -1917,6 +1971,13 @@ function init() {
   registerShortcut("KwiltSwapRight",  "Kwilt: Swap window right",  "Meta+Shift+Right", function () { swapByDirection("right"); });
   registerShortcut("KwiltSwapUp",     "Kwilt: Swap window up",     "Meta+Shift+Up",    function () { swapByDirection("up");    });
   registerShortcut("KwiltSwapDown",   "Kwilt: Swap window down",   "Meta+Shift+Down",  function () { swapByDirection("down");  });
+
+  // Keyboard resize (Meta+Ctrl+Alt+arrows): Right/Down grow the active tile,
+  // Left/Up shrink it, by ResizeStep percent of the work area.
+  registerShortcut("KwiltResizeLeft",  "Kwilt: Shrink window width",  "Meta+Ctrl+Alt+Left",  function () { resizeByDirection("left");  });
+  registerShortcut("KwiltResizeRight", "Kwilt: Grow window width",    "Meta+Ctrl+Alt+Right", function () { resizeByDirection("right"); });
+  registerShortcut("KwiltResizeUp",    "Kwilt: Shrink window height", "Meta+Ctrl+Alt+Up",    function () { resizeByDirection("up");    });
+  registerShortcut("KwiltResizeDown",  "Kwilt: Grow window height",   "Meta+Ctrl+Alt+Down",  function () { resizeByDirection("down");  });
 
   // Focus history. Meta+Tab is claimed by KWin's Walk Through Windows
   // (alongside Alt+Tab) — setup-shortcuts.sh strips just the Meta+Tab half.

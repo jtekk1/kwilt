@@ -151,12 +151,26 @@
    </item>
 
    <item row="9" column="0">
+    <widget class="QLabel" name="resizeStepLabel">
+     <property name="text"><string>Keyboard resize step (Meta+Ctrl+Alt+arrows):</string></property>
+     <property name="wordWrap"><bool>true</bool></property>
+    </widget>
+   </item>
+   <item row="9" column="1">
+    <widget class="QSpinBox" name="kcfg_ResizeStep">
+     <property name="minimum"><number>1</number></property>
+     <property name="maximum"><number>25</number></property>
+     <property name="suffix"><string> %</string></property>
+    </widget>
+   </item>
+
+   <item row="10" column="0">
     <widget class="QLabel" name="nonMasterColumnsLabel">
      <property name="text"><string>Non-master columns (side tiles) / rows (top/bottom tiles):</string></property>
      <property name="wordWrap"><bool>true</bool></property>
     </widget>
    </item>
-   <item row="9" column="1">
+   <item row="10" column="1">
     <widget class="QSpinBox" name="kcfg_NonMasterColumns">
      <property name="minimum"><number>0</number></property>
      <property name="maximum"><number>2</number></property>
@@ -164,24 +178,24 @@
     </widget>
    </item>
 
-   <item row="10" column="0">
+   <item row="11" column="0">
     <widget class="QLabel" name="autoRotatePortraitLabel">
      <property name="text"><string>Rotate autoGrid / centerTile / dual on portrait outputs:</string></property>
      <property name="wordWrap"><bool>true</bool></property>
     </widget>
    </item>
-   <item row="10" column="1">
+   <item row="11" column="1">
     <widget class="QCheckBox" name="kcfg_AutoRotatePortrait">
      <property name="text"><string/></property>
     </widget>
    </item>
 
-   <item row="11" column="0">
+   <item row="12" column="0">
     <widget class="QLabel" name="outerGapLabel">
      <property name="text"><string>Outer gap (px):</string></property>
     </widget>
    </item>
-   <item row="11" column="1">
+   <item row="12" column="1">
     <widget class="QSpinBox" name="kcfg_OuterGap">
      <property name="minimum"><number>0</number></property>
      <property name="maximum"><number>80</number></property>
@@ -189,12 +203,12 @@
     </widget>
    </item>
 
-   <item row="12" column="0">
+   <item row="13" column="0">
     <widget class="QLabel" name="innerGapLabel">
      <property name="text"><string>Inner gap (px):</string></property>
     </widget>
    </item>
-   <item row="12" column="1">
+   <item row="13" column="1">
     <widget class="QSpinBox" name="kcfg_InnerGap">
      <property name="minimum"><number>0</number></property>
      <property name="maximum"><number>80</number></property>
@@ -202,30 +216,30 @@
     </widget>
    </item>
 
-   <item row="13" column="0">
+   <item row="14" column="0">
     <widget class="QLabel" name="borderlessLabel">
      <property name="text"><string>Hide decorations when tiled:</string></property>
     </widget>
    </item>
-   <item row="13" column="1">
+   <item row="14" column="1">
     <widget class="QCheckBox" name="kcfg_BorderlessWhenTiled">
      <property name="text"><string/></property>
     </widget>
    </item>
 
-   <item row="14" column="0">
+   <item row="15" column="0">
     <widget class="QLabel" name="alwaysFloatLabel">
      <property name="text"><string>Always float (resourceClass, comma-separated):</string></property>
      <property name="wordWrap"><bool>true</bool></property>
     </widget>
    </item>
-   <item row="14" column="1">
+   <item row="15" column="1">
     <widget class="QLineEdit" name="kcfg_AlwaysFloat">
      <property name="placeholderText"><string>kcalc, pavucontrol, plasma-systemmonitor</string></property>
     </widget>
    </item>
 
-   <item row="15" column="0" colspan="2">
+   <item row="16" column="0" colspan="2">
     <widget class="QLabel" name="noteLabel">
      <property name="text">
       <string>Changes apply on the next script reload (toggle Kwilt off and on, or relogin).</string>
