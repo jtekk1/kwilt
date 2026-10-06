@@ -1,5 +1,7 @@
 # Kwilt
 
+<img src="docs/kwilt-logo.png" alt="Kwilt logo: four quilt patches, each holding a window" width="160">
+
 Personal KWin tiling script.
 
 ## Screenshots
