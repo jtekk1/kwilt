@@ -175,6 +175,18 @@ kwriteconfig6 --file kwinrc --group Script-kwilt --key MasterWidth 0.6
 Out-of-range values are clamped to the listed range. Invalid `Layout` strings fall back to `centerTile`.
 - Geometry snaps. Visual transitions rely on KDE's built-in desktop effects (System Settings → Workspace Behavior → Desktop Effects).
 
+## Kwilt Pile widget (in development)
+
+`widget/` is a companion Plasma 6 widget listing the minimized windows on its screen, the current virtual desktop and the current activity: everything Kwilt has knocked out past a layout's cap, plus anything you minimized yourself. Click a window to bring it back; Kwilt tiles it again. In a panel it's the Kwilt logo with a count badge and a popup list; on the desktop it shows the list directly.
+
+Try it from the checkout (re-run after edits, or `plasmashell --replace` to reload):
+
+```sh
+kpackagetool6 -t Plasma/Applet -i widget    # first time; -u to update
+```
+
+Then right-click a panel → **Add or Manage Widgets** → **Kwilt Pile**.
+
 ## Persistence (optional helper)
 
 By default, everything you tune at runtime — `MasterWidth` back-solved from a mouse resize, per-(output, virtualDesktop) layout overrides set via `Meta+Ctrl+G/C/M/D/L/T`, row splits, inter-column splits — lives **in memory only** and is lost when the script reloads (login, KCM save, `./dev-reload.sh`). KWin's script API exposes `readConfig` but not `writeConfig`, so a KWin script can't persist these on its own.
