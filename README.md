@@ -179,13 +179,15 @@ Out-of-range values are clamped to the listed range. Invalid `Layout` strings fa
 
 `widget/` is a companion Plasma 6 widget listing the minimized windows on its screen, the current virtual desktop and the current activity: everything Kwilt has knocked out past a layout's cap, plus anything you minimized yourself. Click a window to bring it back; Kwilt tiles it again. In a panel it's the Kwilt logo with a count badge and a popup list; on the desktop it shows the list directly.
 
-Try it from the checkout (re-run after edits, or `plasmashell --replace` to reload):
+Try it from the checkout:
 
 ```sh
 kpackagetool6 -t Plasma/Applet -i widget    # first time; -u to update
 ```
 
 Then right-click a panel → **Add or Manage Widgets** → **Kwilt Pile**.
+
+Plasma caches widget QML, so after `-u` the change shows up on the next login. On NixOS don't restart plasmashell on its own after a rebuild: the new plasmashell comes from a different store path than the KWin you logged in with, KWin refuses it the window-management protocol, and every task list (this widget and the stock Task Manager) goes empty until you log out and back in.
 
 ## Persistence (optional helper)
 
