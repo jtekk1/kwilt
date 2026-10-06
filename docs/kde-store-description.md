@@ -61,11 +61,11 @@ Resize:
   Meta + Ctrl + Alt + Down/Up      grow / shrink the active tile's height
   (step size: ResizeStep, 5% of the screen by default)
 
-Desktops and monitors (Plasma's own actions; adding Shift takes the window with you):
+Desktops and monitors (adding Shift takes the window with you):
   Meta + Ctrl + Arrows             switch virtual desktop (Plasma default)
   Meta + Ctrl + Shift + Arrows     move the window to that desktop (Plasma default)
   Meta + Alt + Arrows              focus the monitor in that direction
-  Meta + Alt + Shift + Arrows      move the window to that monitor
+  Meta + Alt + Shift + Arrows      move the window to that monitor (re-tiled there)
 
 Master & float:
   Meta + S                   toggle master pin on the active window
@@ -74,7 +74,7 @@ Master & float:
 Utility:
   Meta + Ctrl + Shift + R    rebuild tile queues from current windows (ghost-slot recovery)
 
-Shortcut conflicts: Plasma's defaults already use Meta+Arrows (Quick Tile), Meta+Shift+Left/Right (Move Window to Screen), Meta+Alt+Arrows (Switch Window) and Meta+Tab (Walk Through Windows). While those are bound, Kwilt's focus and swap keys can't claim them. Clear or rebind those Plasma entries in System Settings → Shortcuts → KWin, or pick different keys for Kwilt's entries there. The monitor keys are Plasma's "Switch to Screen to the Left/Right/Above/Below" and "Window One Screen to the Left/Right/Up/Down", unbound by default — bind them there to the keys above.
+Shortcut conflicts: Plasma's defaults already use Meta+Arrows (Quick Tile), Meta+Shift+Left/Right (Move Window to Screen), Meta+Alt+Arrows (Switch Window) and Meta+Tab (Walk Through Windows). While those are bound, Kwilt's focus and swap keys can't claim them. Clear or rebind those Plasma entries in System Settings → Shortcuts → KWin, or pick different keys for Kwilt's entries there. The repo's scripts/setup-shortcuts.sh clears all of them in one go (and only that — it doesn't bind anything else).
 
 Mouse resize
 

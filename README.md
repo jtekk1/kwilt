@@ -199,7 +199,7 @@ Then enables the unit. Kwilt logs `persistence helper reachable` on next reload;
 kpackagetool6 -t KWin/Script -i kwilt-*.kwinscript
 ```
 
-Then enable in **System Settings → Window Management → KWin Scripts** and run `scripts/setup-shortcuts.sh` once to seed app-launcher bindings + clear conflicting Plasma defaults.
+Then enable in **System Settings → Window Management → KWin Scripts** and run `scripts/setup-shortcuts.sh` once to clear the Plasma defaults that clash with Kwilt's keys (see Shortcuts).
 
 **As a developer — repo symlink** for fast inner-loop iteration:
 
@@ -248,8 +248,8 @@ Remaining work before the KDE Store submission, roughly in order:
       `TasksModel` (minimized windows per screen/desktop; activating one
       already triggers Kwilt's promote path, so v1 needs no custom IPC).
 - [x] Keyboard resize: `Meta+Ctrl+Alt+arrows`, step set by `ResizeStep`.
-- [x] Send-window-to-screen: Plasma's screen actions bound to
-      `Meta+Alt+(Shift+)arrows` by `setup-shortcuts.sh`.
+- [x] Send-window-to-screen: Kwilt's own `Meta+Alt+(Shift+)arrows`
+      shortcuts, driving KWin's directional screen actions.
 - [ ] KDE Activities: decide — exclude windows outside the current activity
       from tiling, or document Activities as unsupported. Queues currently
       ignore activities entirely.
@@ -270,19 +270,13 @@ Remaining work before the KDE Store submission, roughly in order:
 
 ## Shortcuts
 
-Kwilt registers its **window-management** shortcuts directly. **App launchers** live in KDE's native Custom Shortcuts mechanism — KWin scripts can't spawn processes (no exec API; `callDBus` → systemd-run can't marshal the nested-variant `ExecStart` arg cleanly). Both are configured in one shot by `scripts/setup-shortcuts.sh`, which:
-
-1. Disables Plasma KWin defaults that collide with Kwilt's bindings (Quick Tile on `Meta+arrows`, Move Window to Screen on `Meta+Shift+Left/Right`, Switch Window on `Meta+Alt+arrows`, and the `Meta+Tab` half of Walk Through Windows — `Alt+Tab` is preserved), and binds Plasma's own screen actions to `Meta+Alt+arrows` / `Meta+Alt+Shift+arrows` (see *Desktops and monitors* below).
-2. Installs hidden `.desktop` files under `~/.local/share/applications/kwilt-spawn-*.desktop` for each launcher.
-3. Binds each `.desktop` to a key via `~/.config/kglobalshortcutsrc`.
-
-Run it once after installing the script package:
+Kwilt registers its **window-management** shortcuts itself, as soon as the script is enabled. A default key only takes effect if nothing else holds it, and a stock Plasma install already uses some of them: Quick Tile on `Meta+arrows`, Move Window to Screen on `Meta+Shift+Left/Right`, Switch Window on `Meta+Alt+arrows`, and the `Meta+Tab` half of Walk Through Windows. `scripts/setup-shortcuts.sh` clears those Plasma entries (`Alt+Tab` is kept, and each Plasma default stays recorded so System Settings can restore it):
 
 ```sh
 ./scripts/setup-shortcuts.sh
 ```
 
-Re-runnable safely. After running, log out and back in once if a shortcut doesn't fire — `kglobalaccel` sometimes needs the session restart to pick up new bindings.
+Re-runnable safely. Or do the same by hand in **System Settings → Shortcuts → KWin**. If a key still doesn't fire afterwards, log out and back in once — `kglobalaccel` sometimes needs the session restart to pick up new bindings.
 
 ### Window management (in main.js)
 
@@ -307,6 +301,8 @@ Re-runnable safely. After running, log out and back in once if a shortcut doesn'
 | `Meta+Shift+Left/Right/Up/Down` | Swap focused window with neighbor in that direction |
 | `Meta+Ctrl+Alt+Right/Left` | Grow / shrink the active tile's width by `ResizeStep` |
 | `Meta+Ctrl+Alt+Down/Up` | Grow / shrink the active tile's height by `ResizeStep` |
+| `Meta+Alt+Left/Right/Up/Down` | Focus the monitor in that direction |
+| `Meta+Alt+Shift+Left/Right/Up/Down` | Move the active window to the monitor in that direction (re-tiled there) |
 | `Meta+Tab` | Cycle focus through visible tiles |
 | `Meta+U` | Focus most-recently-focused window (toggle) |
 
@@ -314,18 +310,16 @@ Rebind in **System Settings → Shortcuts → KWin** (search for `Kwilt:`).
 
 ### Desktops and monitors (Plasma built-ins)
 
-Moving between virtual desktops and monitors uses KWin's own actions — Kwilt notices the window's new desktop or output and re-tiles both sides. One rule throughout: **adding `Shift` takes the active window with you.**
+Virtual desktops use Plasma's own default shortcuts, and the monitor keys in the table above follow the same rule: **adding `Shift` takes the active window with you.** Kwilt notices a window's new desktop or output and re-tiles both sides.
 
-| Default | Action | Plasma action (System Settings → Shortcuts → KWin) |
-|---|---|---|
-| `Meta+Ctrl+arrows` | Switch to the virtual desktop in that direction | Switch One Desktop to the Left/Right/Up/Down (Plasma default) |
-| `Meta+Ctrl+Shift+arrows` | Move the active window to that desktop and follow it | Window One Desktop to the Left/Right/Up/Down (Plasma default) |
-| `Meta+Alt+arrows` | Focus the monitor in that direction | Switch to Screen to the Left/Right/Above/Below (bound by `setup-shortcuts.sh`) |
-| `Meta+Alt+Shift+arrows` | Move the active window to the monitor in that direction | Window One Screen to the Left/Right/Up/Down (bound by `setup-shortcuts.sh`) |
+| Default | Action |
+|---|---|
+| `Meta+Ctrl+arrows` | Switch to the virtual desktop in that direction (Plasma: *Switch One Desktop to the Left/Right/Up/Down*) |
+| `Meta+Ctrl+Shift+arrows` | Move the active window to that desktop and follow it (Plasma: *Window One Desktop to the Left/Right/Up/Down*) |
 
-Plasma ships `Meta+Alt+arrows` bound to *Switch Window Left/Right/Up/Down*, which duplicates Kwilt's `Meta+arrows` focus; `setup-shortcuts.sh` clears it. To set these up by hand instead, clear that entry and bind the two screen actions in the table.
+### App launchers (optional, via setup-launchers.sh)
 
-### App launchers (via setup-shortcuts.sh)
+Not part of Kwilt — these are the author's personal launchers, kept in the repo for convenience. KWin scripts can't spawn processes (no exec API; `callDBus` → systemd-run can't marshal the nested-variant `ExecStart` arg), so they live in KDE's native Custom Shortcuts mechanism: `scripts/setup-launchers.sh` installs hidden `~/.local/share/applications/kwilt-spawn-*.desktop` files and binds each in `~/.config/kglobalshortcutsrc`. Edit its `install_launcher` rows before running it on your own machine.
 
 | Default | Action |
 |---|---|
