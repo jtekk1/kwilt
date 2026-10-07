@@ -187,7 +187,7 @@ kpackagetool6 -t Plasma/Applet -i widget    # first time; -u to update
 
 Then right-click a panel → **Add or Manage Widgets** → **Kwilt Pile**.
 
-Plasma caches widget QML, so after `-u` the change shows up on the next login. On NixOS don't restart plasmashell on its own after a rebuild: the new plasmashell comes from a different store path than the KWin you logged in with, KWin refuses it the window-management protocol, and every task list (this widget and the stock Task Manager) goes empty until you log out and back in.
+Plasma caches widget QML, so after `-u` reload it with `systemctl --user restart plasma-plasmashell` (or log out and back in). Exception on NixOS: if you've run a rebuild since logging in, log out instead. The restarted plasmashell would come from a different store path than the KWin you logged in with, KWin refuses it the window-management protocol, and every task list (this widget and the stock Task Manager) goes empty until the next login.
 
 ## Persistence (optional helper)
 
