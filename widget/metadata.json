@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Id": "dev.jtekk.kwilt.pile",
+        "Name": "Kwilt Pile",
+        "Description": "Minimized windows on this screen and desktop, one click to bring each back. Companion to the Kwilt tiling script: windows Kwilt knocks out past a layout's cap land here.",
+        "Icon": "view-grid",
+        "Category": "Windows and Tasks",
+        "Version": "0.10.0-beta.7",
+        "License": "GPL-3.0-or-later",
+        "Website": "https://github.com/jtekk1/kwilt",
+        "Authors": [
+            {
+                "Name": "jtekk",
+                "Email": "jtekk@jtekk.dev"
+            }
+        ]
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
