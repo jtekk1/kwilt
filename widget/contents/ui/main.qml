@@ -60,7 +60,6 @@ PlasmoidItem {
         activity: activityInfo.currentActivity
 
         filterNotMinimized: true
-        filterHidden: true
         groupMode: TaskManager.TasksModel.GroupDisabled
         sortMode: TaskManager.TasksModel.SortLastActivated
     }
