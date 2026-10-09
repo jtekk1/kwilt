@@ -1822,6 +1822,9 @@ function swapByDirection(direction) {
   const t = directionTarget(direction);
   if (!t) return;
   swap(t.slot.found.q, t.slot.split + t.slot.visIdx, t.slot.split + t.nextVis);
+  // As in handleDrop: a swap touching the master slot records the new
+  // master, or applyQueue's exemption swap puts the old one back.
+  if (t.slot.visIdx === 0 || t.nextVis === 0) masters.set(t.slot.found.key, t.slot.found.q[t.slot.split]);
   log("swap " + direction + " → vis " + t.nextVis);
   retileKey(t.slot.found.key);
 }
