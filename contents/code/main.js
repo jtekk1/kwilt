@@ -86,6 +86,7 @@ const CFG = (function () {
     outerGap:           Math.round(clamp(cfg("OuterGap", 0),  0, 80)),
     innerGap:           Math.round(clamp(cfg("InnerGap", 0),  0, 80)),
     borderlessWhenTiled:                cfg("BorderlessWhenTiled", false),
+    layoutOsd:                          cfg("LayoutOsd", true),
     alwaysFloat:        alwaysFloat,
   };
 })();
@@ -1643,6 +1644,15 @@ function setLayoutFor(key, name) {
   }
   log("layout[" + key + "]=" + name + " cap=" + LAYOUTS[name].cap);
   retileKey(key);
+  showOsd("Kwilt: " + name);
+}
+
+// Plasma's on-screen display — the popup volume and brightness changes use.
+// Fire-and-forget over D-Bus; without plasmashell the call fails silently.
+function showOsd(text) {
+  if (!CFG.layoutOsd || typeof callDBus !== "function") return;
+  callDBus("org.kde.plasmashell", "/org/kde/osdService", "org.kde.osdService",
+           "showText", "view-grid", text);
 }
 
 // Direct-set shortcuts (Meta+Ctrl+G/C/M/D) act on the ACTIVE (output,
@@ -1680,6 +1690,45 @@ function toggleMasterPin() {
     log("pinned '" + (w.resourceName || "?") + "' as master on " + found.key);
   }
   retileKey(found.key);
+}
+
+// Promote the active tile to master (visible[0]) by swapping places with the
+// current master. Pressed on the master itself, it swaps with the next tile
+// instead (dwm's zoom). A Meta+S pin owns the slot: applyPin would swap the
+// pinned window straight back, so skip rather than flicker.
+function promoteMaster() {
+  const slot = tileSlotOf(workspace.activeWindow);
+  if (!slot) { log("promote skipped: active window not tiled"); return; }
+  const key = slot.found.key;
+  const q = slot.found.q;
+  if (q.length - slot.split < 2) return;
+  const pinned = pins.get(key);
+  if (pinned && q.indexOf(pinned) >= slot.split) { log("promote skipped: master is pinned on " + key); return; }
+  const target = slot.visIdx === 0 ? 1 : 0;
+  swap(q, slot.split + slot.visIdx, slot.split + target);
+  // Same reason as drag-swap: record the new master so applyQueue's
+  // exemption swap doesn't put the old one back.
+  masters.set(key, q[slot.split]);
+  log("promote vis " + slot.visIdx + " <-> " + target);
+  retileKey(key);
+}
+
+// Bring back the most recently knocked-out window on the active screen and
+// current desktop. Keyed off the screen rather than the active window so it
+// still works when every visible tile has been closed. q[split - 1] is the
+// newest knocked-out entry: eviction is FIFO from the front of the queue.
+function popPile() {
+  const out = workspace.activeScreen;
+  const desk = workspace.currentDesktop;
+  if (!out || !desk) return;
+  const key = keyFor(out, desk);
+  const q = queues.get(key);
+  const split = q ? splitOf(key, q) : 0;
+  if (split === 0) { log("pop skipped: pile empty on " + key); return; }
+  const w = q[split - 1];
+  promoteKnockedToNewest({ key: key, q: q, idx: split - 1 });
+  workspace.activeWindow = w;
+  log("popped '" + (w.resourceName || "?") + "' from the pile on " + key);
 }
 
 // Toggle per-window float opt-out on the active window. `_kwiltFloat` is a
@@ -1966,6 +2015,8 @@ function init() {
   // Master pin: pinned window claims visible[0] on its (output, virtualDesktop).
   registerShortcut("KwiltPinMaster",     "Kwilt: Toggle master pin on active window", "Meta+S",  toggleMasterPin);
   registerShortcut("KwiltToggleFloat",   "Kwilt: Toggle float on active window",      "Meta+\\", toggleFloat);
+  registerShortcut("KwiltPromoteMaster", "Kwilt: Promote active window to master",    "Meta+M",  promoteMaster);
+  registerShortcut("KwiltPopPile",       "Kwilt: Bring back the last minimized window", "Meta+Z", popPile);
 
   // Manual recovery: re-snapshot the queues from workspace.windowList().
   // Use when you suspect a ghost tile slot — quicker than ./dev-reload.sh.
