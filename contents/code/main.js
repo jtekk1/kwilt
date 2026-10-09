@@ -835,6 +835,8 @@ function geometriesFloating() { return []; }
 //                short-circuits when the (output, virtualDesktop)'s layout
 //                has tiles === false.
 //   shortcut   — direct-set key sequence (e.g. `Meta+Ctrl+G`) or null.
+//   label      — display name for the on-screen popup and the shortcut
+//                names in System Settings. The key stays the config value.
 //   shortcutId — kglobalaccel action ID for the direct-set shortcut. Frozen
 //                per-layout for shortcut persistence; user re-binds in KDE
 //                Shortcuts settings if defaults collide.
@@ -845,17 +847,17 @@ function geometriesFloating() { return []; }
 // only hit at call time — long after this const-in-var-clothing is
 // initialized — but const-in-TDZ triggers a warning per hit at reload.
 var LAYOUTS = {
-  autoGrid:       { geometries: withPortraitTranspose(geometriesAutoGrid),   cap: CFG.capAutoGrid,       maxN: 12,   tiles: true,  shortcut: "Meta+Ctrl+G",       shortcutId: "KwiltLayoutGrid"           },
-  centerTile:     { geometries: withPortraitTranspose(geometriesCenterTile), cap: CFG.capCenterTile,     maxN: 9,    tiles: true,  shortcut: "Meta+Ctrl+C",       shortcutId: "KwiltLayoutCenter"         },
-  verticalCenter: { geometries: geometriesVerticalCenter, cap: CFG.capVerticalCenter, maxN: 9,    tiles: true,  shortcut: "Meta+Ctrl+Shift+C", shortcutId: "KwiltLayoutVerticalCenter" },
-  monocle:        { geometries: geometriesMonocle,        cap: 1,                     maxN: null, tiles: true,  shortcut: "Meta+Ctrl+M",       shortcutId: "KwiltLayoutMonocle"        },
-  dual:           { geometries: withPortraitTranspose(geometriesDual),       cap: 2,  maxN: null, tiles: true,  shortcut: "Meta+Ctrl+D",       shortcutId: "KwiltLayoutDual"           },
-  verticalDual:   { geometries: geometriesVerticalDual,   cap: 2,                     maxN: null, tiles: true,  shortcut: "Meta+Ctrl+Shift+D", shortcutId: "KwiltLayoutVerticalDual"   },
-  leftTile:       { geometries: geometriesLeftTile,       cap: CFG.capLeftTile,       maxN: null, tiles: true,  shortcut: "Meta+Ctrl+L",       shortcutId: "KwiltLayoutLeft"           },
-  rightTile:      { geometries: geometriesRightTile,      cap: CFG.capRightTile,      maxN: null, tiles: true,  shortcut: "Meta+Ctrl+T",       shortcutId: "KwiltLayoutRight"          },
-  topTile:        { geometries: geometriesTopTile,        cap: CFG.capTopTile,        maxN: null, tiles: true,  shortcut: "Meta+Ctrl+U",       shortcutId: "KwiltLayoutTop"            },
-  bottomTile:     { geometries: geometriesBottomTile,     cap: CFG.capBottomTile,     maxN: null, tiles: true,  shortcut: "Meta+Ctrl+B",       shortcutId: "KwiltLayoutBottom"         },
-  floating:       { geometries: geometriesFloating,       cap: 0,                     maxN: null, tiles: false, shortcut: "Meta+Ctrl+F",       shortcutId: "KwiltLayoutFloating"       },
+  autoGrid:       { label: "Auto Grid",        geometries: withPortraitTranspose(geometriesAutoGrid),   cap: CFG.capAutoGrid,       maxN: 12,   tiles: true,  shortcut: "Meta+Ctrl+G",       shortcutId: "KwiltLayoutGrid"           },
+  centerTile:     { label: "Center Tile",      geometries: withPortraitTranspose(geometriesCenterTile), cap: CFG.capCenterTile,     maxN: 9,    tiles: true,  shortcut: "Meta+Ctrl+C",       shortcutId: "KwiltLayoutCenter"         },
+  verticalCenter: { label: "Vertical Center",  geometries: geometriesVerticalCenter, cap: CFG.capVerticalCenter, maxN: 9,    tiles: true,  shortcut: "Meta+Ctrl+Shift+C", shortcutId: "KwiltLayoutVerticalCenter" },
+  monocle:        { label: "Monocle",          geometries: geometriesMonocle,        cap: 1,                     maxN: null, tiles: true,  shortcut: "Meta+Ctrl+M",       shortcutId: "KwiltLayoutMonocle"        },
+  dual:           { label: "Dual",             geometries: withPortraitTranspose(geometriesDual),       cap: 2,  maxN: null, tiles: true,  shortcut: "Meta+Ctrl+D",       shortcutId: "KwiltLayoutDual"           },
+  verticalDual:   { label: "Vertical Dual",    geometries: geometriesVerticalDual,   cap: 2,                     maxN: null, tiles: true,  shortcut: "Meta+Ctrl+Shift+D", shortcutId: "KwiltLayoutVerticalDual"   },
+  leftTile:       { label: "Left Tile",        geometries: geometriesLeftTile,       cap: CFG.capLeftTile,       maxN: null, tiles: true,  shortcut: "Meta+Ctrl+L",       shortcutId: "KwiltLayoutLeft"           },
+  rightTile:      { label: "Right Tile",       geometries: geometriesRightTile,      cap: CFG.capRightTile,      maxN: null, tiles: true,  shortcut: "Meta+Ctrl+T",       shortcutId: "KwiltLayoutRight"          },
+  topTile:        { label: "Top Tile",         geometries: geometriesTopTile,        cap: CFG.capTopTile,        maxN: null, tiles: true,  shortcut: "Meta+Ctrl+U",       shortcutId: "KwiltLayoutTop"            },
+  bottomTile:     { label: "Bottom Tile",      geometries: geometriesBottomTile,     cap: CFG.capBottomTile,     maxN: null, tiles: true,  shortcut: "Meta+Ctrl+B",       shortcutId: "KwiltLayoutBottom"         },
+  floating:       { label: "Floating",         geometries: geometriesFloating,       cap: 0,                     maxN: null, tiles: false, shortcut: "Meta+Ctrl+F",       shortcutId: "KwiltLayoutFloating"       },
 };
 
 // Drift check: LAYOUT_NAMES is used by the CFG/hydrate early validation and
@@ -1644,7 +1646,7 @@ function setLayoutFor(key, name) {
   }
   log("layout[" + key + "]=" + name + " cap=" + LAYOUTS[name].cap);
   retileKey(key);
-  showOsd("Kwilt: " + name);
+  showOsd("Kwilt: " + LAYOUTS[name].label);
 }
 
 // Plasma's on-screen display — the popup volume and brightness changes use.
@@ -2011,7 +2013,7 @@ function init() {
   Object.keys(LAYOUTS).forEach(function (name) {
     const entry = LAYOUTS[name];
     if (!entry.shortcut) return;
-    registerShortcut(entry.shortcutId, "Kwilt: Layout — " + name, entry.shortcut,
+    registerShortcut(entry.shortcutId, "Kwilt: Layout — " + entry.label, entry.shortcut,
                      function () { setLayout(name); });
   });
 
