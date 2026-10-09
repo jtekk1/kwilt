@@ -105,6 +105,10 @@
             <default>false</default>
         </entry>
 
+        <entry name="LayoutOsd" type="Bool">
+            <default>true</default>
+        </entry>
+
         <entry name="AlwaysFloat" type="String">
             <default></default>
         </entry>

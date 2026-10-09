@@ -161,6 +161,7 @@ Two equivalent paths — both read/write `~/.config/kwinrc` under `[Script-kwilt
 | `AutoRotatePortrait` | bool | `true` | `true` / `false` | Render `autoGrid` / `centerTile` / `dual` transposed on portrait outputs (columns become rows). The explicit vertical layouts and `leftTile` / `rightTile` are never auto-rotated. |
 | `OuterGap` | int | `0` | `0`–`80` | Pixels between any tile edge and the work area edge. `0` = flush to the screen. |
 | `InnerGap` | int | `0` | `0`–`80` | Pixels between adjacent tiles. Split halved on each side; odd values round consistently so adjacent gaps sum exactly. |
+| `LayoutOsd` | bool | `true` | `true` / `false` | Show the new layout's name in Plasma's on-screen popup when you switch layouts. |
 | `BorderlessWhenTiled` | bool | `false` | `true` / `false` | Hide window decorations on visible tiles by setting `noBorder`. Original border state is saved per-window and restored on untrack/close/fullscreen. |
 | `AlwaysFloat` | string | `""` | comma-separated | Substrings matched (case-insensitive) against each window's `resourceClass` and `resourceName`. Matches are never tiled (e.g. `kcalc, pavucontrol, plasma-systemmonitor`). |
 
@@ -298,6 +299,8 @@ Re-runnable safely. Or do the same by hand in **System Settings → Shortcuts �
 | `Meta+Ctrl+F` | Set layout on active (output, virtualDesktop): floating (nothing on that key tiles until switched back) |
 | `Meta+S` | Toggle master pin on active window (claims the master slot on its output/desktop; session-only) |
 | `Meta+\` | Toggle float on active window (opts the window out of tiling until toggled off; session-only) |
+| `Meta+M` | Promote active window to master (swaps with the current master; pressed on the master, swaps it with the next tile). No-op while a `Meta+S` pin holds the slot |
+| `Meta+Z` | Bring back the most recently knocked-out (minimized) window on the active screen and desktop |
 | `Meta+Ctrl+Shift+R` | Rebuild tile queues from current windows (ghost-slot recovery) |
 | `Meta+Left/Right/Up/Down` | Focus tile in that direction |
 | `Meta+Shift+Left/Right/Up/Down` | Swap focused window with neighbor in that direction |

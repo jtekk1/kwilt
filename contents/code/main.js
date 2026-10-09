@@ -86,6 +86,7 @@ const CFG = (function () {
     outerGap:           Math.round(clamp(cfg("OuterGap", 0),  0, 80)),
     innerGap:           Math.round(clamp(cfg("InnerGap", 0),  0, 80)),
     borderlessWhenTiled:                cfg("BorderlessWhenTiled", false),
+    layoutOsd:                          cfg("LayoutOsd", true),
     alwaysFloat:        alwaysFloat,
   };
 })();
@@ -834,6 +835,8 @@ function geometriesFloating() { return []; }
 //                short-circuits when the (output, virtualDesktop)'s layout
 //                has tiles === false.
 //   shortcut   — direct-set key sequence (e.g. `Meta+Ctrl+G`) or null.
+//   label      — display name for the on-screen popup and the shortcut
+//                names in System Settings. The key stays the config value.
 //   shortcutId — kglobalaccel action ID for the direct-set shortcut. Frozen
 //                per-layout for shortcut persistence; user re-binds in KDE
 //                Shortcuts settings if defaults collide.
@@ -844,17 +847,17 @@ function geometriesFloating() { return []; }
 // only hit at call time — long after this const-in-var-clothing is
 // initialized — but const-in-TDZ triggers a warning per hit at reload.
 var LAYOUTS = {
-  autoGrid:       { geometries: withPortraitTranspose(geometriesAutoGrid),   cap: CFG.capAutoGrid,       maxN: 12,   tiles: true,  shortcut: "Meta+Ctrl+G",       shortcutId: "KwiltLayoutGrid"           },
-  centerTile:     { geometries: withPortraitTranspose(geometriesCenterTile), cap: CFG.capCenterTile,     maxN: 9,    tiles: true,  shortcut: "Meta+Ctrl+C",       shortcutId: "KwiltLayoutCenter"         },
-  verticalCenter: { geometries: geometriesVerticalCenter, cap: CFG.capVerticalCenter, maxN: 9,    tiles: true,  shortcut: "Meta+Ctrl+Shift+C", shortcutId: "KwiltLayoutVerticalCenter" },
-  monocle:        { geometries: geometriesMonocle,        cap: 1,                     maxN: null, tiles: true,  shortcut: "Meta+Ctrl+M",       shortcutId: "KwiltLayoutMonocle"        },
-  dual:           { geometries: withPortraitTranspose(geometriesDual),       cap: 2,  maxN: null, tiles: true,  shortcut: "Meta+Ctrl+D",       shortcutId: "KwiltLayoutDual"           },
-  verticalDual:   { geometries: geometriesVerticalDual,   cap: 2,                     maxN: null, tiles: true,  shortcut: "Meta+Ctrl+Shift+D", shortcutId: "KwiltLayoutVerticalDual"   },
-  leftTile:       { geometries: geometriesLeftTile,       cap: CFG.capLeftTile,       maxN: null, tiles: true,  shortcut: "Meta+Ctrl+L",       shortcutId: "KwiltLayoutLeft"           },
-  rightTile:      { geometries: geometriesRightTile,      cap: CFG.capRightTile,      maxN: null, tiles: true,  shortcut: "Meta+Ctrl+T",       shortcutId: "KwiltLayoutRight"          },
-  topTile:        { geometries: geometriesTopTile,        cap: CFG.capTopTile,        maxN: null, tiles: true,  shortcut: "Meta+Ctrl+U",       shortcutId: "KwiltLayoutTop"            },
-  bottomTile:     { geometries: geometriesBottomTile,     cap: CFG.capBottomTile,     maxN: null, tiles: true,  shortcut: "Meta+Ctrl+B",       shortcutId: "KwiltLayoutBottom"         },
-  floating:       { geometries: geometriesFloating,       cap: 0,                     maxN: null, tiles: false, shortcut: "Meta+Ctrl+F",       shortcutId: "KwiltLayoutFloating"       },
+  autoGrid:       { label: "Auto Grid",        geometries: withPortraitTranspose(geometriesAutoGrid),   cap: CFG.capAutoGrid,       maxN: 12,   tiles: true,  shortcut: "Meta+Ctrl+G",       shortcutId: "KwiltLayoutGrid"           },
+  centerTile:     { label: "Center Tile",      geometries: withPortraitTranspose(geometriesCenterTile), cap: CFG.capCenterTile,     maxN: 9,    tiles: true,  shortcut: "Meta+Ctrl+C",       shortcutId: "KwiltLayoutCenter"         },
+  verticalCenter: { label: "Vertical Center",  geometries: geometriesVerticalCenter, cap: CFG.capVerticalCenter, maxN: 9,    tiles: true,  shortcut: "Meta+Ctrl+Shift+C", shortcutId: "KwiltLayoutVerticalCenter" },
+  monocle:        { label: "Monocle",          geometries: geometriesMonocle,        cap: 1,                     maxN: null, tiles: true,  shortcut: "Meta+Ctrl+M",       shortcutId: "KwiltLayoutMonocle"        },
+  dual:           { label: "Dual",             geometries: withPortraitTranspose(geometriesDual),       cap: 2,  maxN: null, tiles: true,  shortcut: "Meta+Ctrl+D",       shortcutId: "KwiltLayoutDual"           },
+  verticalDual:   { label: "Vertical Dual",    geometries: geometriesVerticalDual,   cap: 2,                     maxN: null, tiles: true,  shortcut: "Meta+Ctrl+Shift+D", shortcutId: "KwiltLayoutVerticalDual"   },
+  leftTile:       { label: "Left Tile",        geometries: geometriesLeftTile,       cap: CFG.capLeftTile,       maxN: null, tiles: true,  shortcut: "Meta+Ctrl+L",       shortcutId: "KwiltLayoutLeft"           },
+  rightTile:      { label: "Right Tile",       geometries: geometriesRightTile,      cap: CFG.capRightTile,      maxN: null, tiles: true,  shortcut: "Meta+Ctrl+T",       shortcutId: "KwiltLayoutRight"          },
+  topTile:        { label: "Top Tile",         geometries: geometriesTopTile,        cap: CFG.capTopTile,        maxN: null, tiles: true,  shortcut: "Meta+Ctrl+U",       shortcutId: "KwiltLayoutTop"            },
+  bottomTile:     { label: "Bottom Tile",      geometries: geometriesBottomTile,     cap: CFG.capBottomTile,     maxN: null, tiles: true,  shortcut: "Meta+Ctrl+B",       shortcutId: "KwiltLayoutBottom"         },
+  floating:       { label: "Floating",         geometries: geometriesFloating,       cap: 0,                     maxN: null, tiles: false, shortcut: "Meta+Ctrl+F",       shortcutId: "KwiltLayoutFloating"       },
 };
 
 // Drift check: LAYOUT_NAMES is used by the CFG/hydrate early validation and
@@ -1643,6 +1646,15 @@ function setLayoutFor(key, name) {
   }
   log("layout[" + key + "]=" + name + " cap=" + LAYOUTS[name].cap);
   retileKey(key);
+  showOsd("Kwilt: " + LAYOUTS[name].label);
+}
+
+// Plasma's on-screen display — the popup volume and brightness changes use.
+// Fire-and-forget over D-Bus; without plasmashell the call fails silently.
+function showOsd(text) {
+  if (!CFG.layoutOsd || typeof callDBus !== "function") return;
+  callDBus("org.kde.plasmashell", "/org/kde/osdService", "org.kde.osdService",
+           "showText", "view-grid", text);
 }
 
 // Direct-set shortcuts (Meta+Ctrl+G/C/M/D) act on the ACTIVE (output,
@@ -1680,6 +1692,45 @@ function toggleMasterPin() {
     log("pinned '" + (w.resourceName || "?") + "' as master on " + found.key);
   }
   retileKey(found.key);
+}
+
+// Promote the active tile to master (visible[0]) by swapping places with the
+// current master. Pressed on the master itself, it swaps with the next tile
+// instead (dwm's zoom). A Meta+S pin owns the slot: applyPin would swap the
+// pinned window straight back, so skip rather than flicker.
+function promoteMaster() {
+  const slot = tileSlotOf(workspace.activeWindow);
+  if (!slot) { log("promote skipped: active window not tiled"); return; }
+  const key = slot.found.key;
+  const q = slot.found.q;
+  if (q.length - slot.split < 2) return;
+  const pinned = pins.get(key);
+  if (pinned && q.indexOf(pinned) >= slot.split) { log("promote skipped: master is pinned on " + key); return; }
+  const target = slot.visIdx === 0 ? 1 : 0;
+  swap(q, slot.split + slot.visIdx, slot.split + target);
+  // Same reason as drag-swap: record the new master so applyQueue's
+  // exemption swap doesn't put the old one back.
+  masters.set(key, q[slot.split]);
+  log("promote vis " + slot.visIdx + " <-> " + target);
+  retileKey(key);
+}
+
+// Bring back the most recently knocked-out window on the active screen and
+// current desktop. Keyed off the screen rather than the active window so it
+// still works when every visible tile has been closed. q[split - 1] is the
+// newest knocked-out entry: eviction is FIFO from the front of the queue.
+function popPile() {
+  const out = workspace.activeScreen;
+  const desk = workspace.currentDesktop;
+  if (!out || !desk) return;
+  const key = keyFor(out, desk);
+  const q = queues.get(key);
+  const split = q ? splitOf(key, q) : 0;
+  if (split === 0) { log("pop skipped: pile empty on " + key); return; }
+  const w = q[split - 1];
+  promoteKnockedToNewest({ key: key, q: q, idx: split - 1 });
+  workspace.activeWindow = w;
+  log("popped '" + (w.resourceName || "?") + "' from the pile on " + key);
 }
 
 // Toggle per-window float opt-out on the active window. `_kwiltFloat` is a
@@ -1773,6 +1824,9 @@ function swapByDirection(direction) {
   const t = directionTarget(direction);
   if (!t) return;
   swap(t.slot.found.q, t.slot.split + t.slot.visIdx, t.slot.split + t.nextVis);
+  // As in handleDrop: a swap touching the master slot records the new
+  // master, or applyQueue's exemption swap puts the old one back.
+  if (t.slot.visIdx === 0 || t.nextVis === 0) masters.set(t.slot.found.key, t.slot.found.q[t.slot.split]);
   log("swap " + direction + " → vis " + t.nextVis);
   retileKey(t.slot.found.key);
 }
@@ -1959,13 +2013,15 @@ function init() {
   Object.keys(LAYOUTS).forEach(function (name) {
     const entry = LAYOUTS[name];
     if (!entry.shortcut) return;
-    registerShortcut(entry.shortcutId, "Kwilt: Layout — " + name, entry.shortcut,
+    registerShortcut(entry.shortcutId, "Kwilt: Layout — " + entry.label, entry.shortcut,
                      function () { setLayout(name); });
   });
 
   // Master pin: pinned window claims visible[0] on its (output, virtualDesktop).
   registerShortcut("KwiltPinMaster",     "Kwilt: Toggle master pin on active window", "Meta+S",  toggleMasterPin);
   registerShortcut("KwiltToggleFloat",   "Kwilt: Toggle float on active window",      "Meta+\\", toggleFloat);
+  registerShortcut("KwiltPromoteMaster", "Kwilt: Promote active window to master",    "Meta+M",  promoteMaster);
+  registerShortcut("KwiltPopPile",       "Kwilt: Bring back the last minimized window", "Meta+Z", popPile);
 
   // Manual recovery: re-snapshot the queues from workspace.windowList().
   // Use when you suspect a ghost tile slot — quicker than ./dev-reload.sh.
