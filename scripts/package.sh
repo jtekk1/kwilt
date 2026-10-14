@@ -4,10 +4,11 @@
 #
 # Build the release archives for KWin / KDE Store distribution:
 #
-#   build/kwilt-<VERSION>.kwinscript              the KWin script
-#   build/dev.jtekk.kwilt.pile-<VERSION>.plasmoid  the Kwilt Pile widget
+#   build/kwilt-<VERSION>.kwinscript                 the KWin script
+#   build/dev.jtekk.kwilt.pile-<VERSION>.plasmoid     the Kwilt Pile widget
+#   build/dev.jtekk.kwilt.layouts-<VERSION>.plasmoid  the Kwilt Layouts widget
 #
-# Both are plain ZIPs with metadata.json at the root, installed with
+# One .plasmoid per directory under widgets/. All are plain ZIPs with metadata.json at the root, installed with
 # `kpackagetool6 -t KWin/Script -i <file>` and `-t Plasma/Applet -i <file>`.
 # Each ships metadata.json, its runtime contents/ directory and LICENSE (the
 # script also README.md) — nothing else from the dev tree (no .githooks,
@@ -54,27 +55,29 @@ zip -r "$out" \
     LICENSE \
     >/dev/null
 
-widget_id=$(jq -r '.KPlugin.Id' widget/metadata.json)
-widget_version=$(jq -r '.KPlugin.Version' widget/metadata.json)
+echo "wrote ${out} ($(du -h "$out" | cut -f1))"
 
-# The two packages release together under one tag, so their versions move in
-# lockstep.
-if [ "$widget_version" != "$version" ]; then
-    echo "error: widget/metadata.json KPlugin.Version (${widget_version}) does not match metadata.json (${version})" >&2
-    exit 1
-fi
+for dir in widgets/*/; do
+    dir=${dir%/}
+    widget_id=$(jq -r '.KPlugin.Id' "${dir}/metadata.json")
+    widget_version=$(jq -r '.KPlugin.Version' "${dir}/metadata.json")
 
-widget_out="${out_dir}/${widget_id}-${version}.plasmoid"
-rm -f "$widget_out"
+    # The script and widgets release together under one tag, so their
+    # versions move in lockstep.
+    if [ "$widget_version" != "$version" ]; then
+        echo "error: ${dir}/metadata.json KPlugin.Version (${widget_version}) does not match metadata.json (${version})" >&2
+        exit 1
+    fi
 
-# zip stores paths relative to the working directory, so build from inside
-# widget/ to put its metadata.json at the archive root. LICENSE comes from the
-# repo root via -j (junk the path).
-(cd widget && zip -r "../${widget_out}" metadata.json contents >/dev/null)
-zip -j "$widget_out" LICENSE >/dev/null
+    widget_out="${out_dir}/${widget_id}-${version}.plasmoid"
+    rm -f "$widget_out"
 
-for f in "$out" "$widget_out"; do
-    echo "wrote ${f} ($(du -h "$f" | cut -f1))"
+    # zip stores paths relative to the working directory, so build from
+    # inside the widget's directory to put its metadata.json at the archive
+    # root. LICENSE comes from the repo root via -j (junk the path).
+    (cd "$dir" && zip -r "${repo_root}/${widget_out}" metadata.json contents >/dev/null)
+    zip -j "$widget_out" LICENSE >/dev/null
+    echo "wrote ${widget_out} ($(du -h "$widget_out" | cut -f1))"
 done
 echo
 echo "Install locally for end-to-end testing:"
@@ -82,4 +85,4 @@ echo "    npm run install:local"
 echo
 echo "Inspect contents:"
 echo "    unzip -l ${out}"
-echo "    unzip -l ${widget_out}"
+echo "    unzip -l ${out_dir}/*.plasmoid"

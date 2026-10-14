@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Id": "dev.jtekk.kwilt.layouts",
+        "Name": "Kwilt Layouts",
+        "Description": "Pick the Kwilt tiling layout for this screen and desktop with a click. Companion to the Kwilt tiling script: each entry runs the same action as its layout shortcut.",
+        "Icon": "view-grid",
+        "Category": "Windows and Tasks",
+        "Version": "0.10.0-beta.7",
+        "License": "GPL-3.0-or-later",
+        "Website": "https://github.com/jtekk1/kwilt",
+        "Authors": [
+            {
+                "Name": "jtekk",
+                "Email": "jtekk@jtekk.dev"
+            }
+        ]
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

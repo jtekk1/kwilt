@@ -177,17 +177,22 @@ kwriteconfig6 --file kwinrc --group Script-kwilt --key MasterWidth 0.6
 Out-of-range values are clamped to the listed range. Invalid `Layout` strings fall back to `centerTile`.
 - Geometry snaps. Visual transitions rely on KDE's built-in desktop effects (System Settings → Workspace Behavior → Desktop Effects).
 
-## Kwilt Pile widget
+## Widgets
 
-`widget/` is a companion Plasma 6 widget listing the minimized windows on its screen, the current virtual desktop and the current activity: everything Kwilt has knocked out past a layout's cap, plus anything you minimized yourself. Click a window to bring it back; Kwilt tiles it again. In a panel it's the Kwilt logo with a count badge and a popup list; on the desktop it shows the list directly.
+Two optional Plasma 6 widgets live under `widgets/`. Each release attaches both as `.plasmoid` files (see Install).
 
-Each release attaches it as `dev.jtekk.kwilt.pile-<VERSION>.plasmoid` (see Install). To try it from the checkout instead:
+**Kwilt Pile** (`widgets/pile/`) lists the minimized windows on its screen, the current virtual desktop and the current activity: everything Kwilt has knocked out past a layout's cap, plus anything you minimized yourself. Click a window to bring it back; Kwilt tiles it again. In a panel it's the Kwilt logo with a count badge and a popup list; on the desktop it shows the list directly.
+
+**Kwilt Layouts** (`widgets/layouts/`) picks the layout with a click instead of a shortcut: a list of the eleven layouts, each with a small sketch of its tiles. Clicking one runs the same action as that layout's shortcut, so it applies to the screen and desktop of the focused window, or, when nothing tiled has the focus (as when you click a panel popup), to the active screen and current desktop. It doesn't highlight the current layout: a KWin script has no way to publish its state to a widget. The on-screen popup confirms each switch instead.
+
+To try them from the checkout:
 
 ```sh
-kpackagetool6 -t Plasma/Applet -i widget    # first time; -u to update
+kpackagetool6 -t Plasma/Applet -i widgets/pile      # first time; -u to update
+kpackagetool6 -t Plasma/Applet -i widgets/layouts
 ```
 
-Then right-click a panel → **Add or Manage Widgets** → **Kwilt Pile**.
+Then right-click a panel → **Add or Manage Widgets** → **Kwilt Pile** or **Kwilt Layouts**.
 
 Plasma caches widget QML, so after `-u` reload it with `systemctl --user restart plasma-plasmashell` (or log out and back in). Exception on NixOS: if you've run a rebuild since logging in, log out instead. The restarted plasmashell would come from a different store path than the KWin you logged in with, KWin refuses it the window-management protocol, and every task list (this widget and the stock Task Manager) goes empty until the next login.
 
@@ -219,13 +224,14 @@ kpackagetool6 -t KWin/Script -i kwilt-*.kwinscript
 
 Then enable in **System Settings → Window Management → KWin Scripts** and run `scripts/setup-shortcuts.sh` once to clear the Plasma defaults that clash with Kwilt's keys (see Shortcuts).
 
-The optional [Kwilt Pile widget](#kwilt-pile-widget) is the `.plasmoid` from the same release:
+The optional [widgets](#widgets) are the `.plasmoid` files from the same release:
 
 ```sh
-kpackagetool6 -t Plasma/Applet -i dev.jtekk.kwilt.pile-*.plasmoid   # -u to upgrade
+kpackagetool6 -t Plasma/Applet -i dev.jtekk.kwilt.pile-*.plasmoid      # -u to upgrade
+kpackagetool6 -t Plasma/Applet -i dev.jtekk.kwilt.layouts-*.plasmoid
 ```
 
-Then right-click a panel → **Add or Manage Widgets** → **Kwilt Pile**.
+Then right-click a panel → **Add or Manage Widgets** → **Kwilt Pile** or **Kwilt Layouts**.
 
 **As a developer — repo symlink** for fast inner-loop iteration:
 
