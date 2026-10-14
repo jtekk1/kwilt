@@ -25,6 +25,8 @@ Master pin
 
 Meta+S toggles a master pin on the active window. The pinned window claims the master slot on its (output, virtualDesktop) — center in centerTile, top-left in autoGrid, first slot in dual, master column or row in leftTile / rightTile / topTile / bottomTile. The pin is sticky under drag-swap, survives layout switches, and travels with the window when moved across outputs / desktops.
 
+Meta+M promotes the active window to master by swapping it with the current one (pressed on the master, it swaps with the next tile). Meta+Z brings back the most recently knocked-out window on the active screen and desktop.
+
 Float toggle
 
 Meta+\ toggles a per-window float on the active window — a floated window is ignored by tiling until you toggle it back. Meta+Ctrl+F does the same at layout scope: switches the active (output, virtualDesktop) to the floating layout so nothing on that key tiles until you pick a tiling layout again.
@@ -103,6 +105,7 @@ ResizeStep — percent of the screen one keyboard-resize press moves an edge by;
 NonMasterColumns — leftTile / rightTile non-master column count (rows for topTile / bottomTile); 0 = auto (aspect ratio > 2:1 → 2, else 1), or 1 / 2 explicit
 AutoRotatePortrait — turn autoGrid / centerTile / dual on their side on portrait outputs; default on
 OuterGap / InnerGap — pixel gaps between tiles and the work-area edge
+LayoutOsd — show the layout name in Plasma's on-screen popup when it changes; default on
 BorderlessWhenTiled — strip window decorations on tiled windows
 AlwaysFloat — comma-separated substring matches against resourceClass / resourceName (e.g. kcalc, pavucontrol, plasma-systemmonitor); matches never tile
 
