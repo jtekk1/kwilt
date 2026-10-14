@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 jtekk <jtekk@jtekk.dev>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Install the built .kwinscript via kpackagetool6.
+# Install the built .kwinscript and the Kwilt Pile .plasmoid via kpackagetool6.
 #
 # This is the end-to-end install path — the real one a user would take. It is
 # NOT the dev loop (./dev-reload.sh handles that via the symlink and a busctl
@@ -22,11 +22,15 @@ fi
 plugin_id=$(jq -r '.KPlugin.Id' metadata.json)
 version=$(jq -r '.KPlugin.Version' metadata.json)
 archive="build/${plugin_id}-${version}.kwinscript"
+widget_id=$(jq -r '.KPlugin.Id' widget/metadata.json)
+widget_archive="build/${widget_id}-${version}.plasmoid"
 
-if [ ! -f "$archive" ]; then
-    echo "error: ${archive} not found. Run 'npm run package' first." >&2
-    exit 1
-fi
+for f in "$archive" "$widget_archive"; do
+    if [ ! -f "$f" ]; then
+        echo "error: ${f} not found. Run 'npm run package' first." >&2
+        exit 1
+    fi
+done
 
 # The dev symlink (./dev-reload.sh's install path) lives where kpackagetool6
 # would write. Refuse rather than clobber — the user must consciously switch
@@ -53,6 +57,24 @@ else
 fi
 
 kpackagetool6 -t KWin/Script "$action" "$archive"
-echo
 echo "${verb^} ${plugin_id} ${version}."
-echo "Enable in: System Settings → Window Management → KWin Scripts."
+
+# The widget has no dev symlink to protect: the dev path installs it from
+# widget/ with kpackagetool6 too, so upgrading over it is safe.
+widget_path="${HOME}/.local/share/plasma/plasmoids/${widget_id}"
+if [ -d "$widget_path" ]; then
+    widget_action="-u"
+    widget_verb="upgraded"
+else
+    widget_action="-i"
+    widget_verb="installed"
+fi
+
+kpackagetool6 -t Plasma/Applet "$widget_action" "$widget_archive"
+echo "${widget_verb^} ${widget_id} ${version}."
+
+echo
+echo "Enable the script in: System Settings → Window Management → KWin Scripts."
+echo "Add the widget: right-click a panel → Add or Manage Widgets → Kwilt Pile."
+echo "Plasma caches widget QML; after an upgrade, run"
+echo "    systemctl --user restart plasma-plasmashell"

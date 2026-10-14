@@ -11,7 +11,7 @@ on:
 
 jobs:
   release:
-    name: Build and publish .kwinscript
+    name: Build and publish .kwinscript and .plasmoid
     runs-on: ubuntu-latest
     permissions:
       contents: write   # required for actions/create-release
@@ -26,36 +26,43 @@ jobs:
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y jq zip
 
-      - name: Verify tag matches metadata.json KPlugin.Version
+      - name: Verify tag matches both KPlugin.Version fields
         run: |
           set -euo pipefail
           tag_version="${GITHUB_REF#refs/tags/v}"
-          json_version=$(jq -r '.KPlugin.Version' metadata.json)
-          if [ "$tag_version" != "$json_version" ]; then
-            echo "::error::Tag v${tag_version} does not match metadata.json KPlugin.Version (${json_version})."
-            echo "::error::Bump KPlugin.Version in a commit, then re-tag."
-            exit 1
-          fi
+          for manifest in metadata.json widget/metadata.json; do
+            json_version=$(jq -r '.KPlugin.Version' "$manifest")
+            if [ "$tag_version" != "$json_version" ]; then
+              echo "::error::Tag v${tag_version} does not match ${manifest} KPlugin.Version (${json_version})."
+              echo "::error::Bump KPlugin.Version in both manifests in a commit, then re-tag."
+              exit 1
+            fi
+          done
 
-      - name: Build .kwinscript artifact
+      - name: Build .kwinscript and .plasmoid artifacts
         run: ./scripts/package.sh
 
-      - name: Verify artifact
+      - name: Verify artifacts
         run: |
           set -euo pipefail
           json_version=$(jq -r '.KPlugin.Version' metadata.json)
-          artifact="build/kwilt-${json_version}.kwinscript"
-          if [ ! -f "$artifact" ]; then
-            echo "::error::Expected ${artifact} not produced by scripts/package.sh"
-            exit 1
-          fi
-          ls -la "$artifact"
-          unzip -l "$artifact"
+          widget_id=$(jq -r '.KPlugin.Id' widget/metadata.json)
+          for artifact in "build/kwilt-${json_version}.kwinscript" \
+                          "build/${widget_id}-${json_version}.plasmoid"; do
+            if [ ! -f "$artifact" ]; then
+              echo "::error::Expected ${artifact} not produced by scripts/package.sh"
+              exit 1
+            fi
+            ls -la "$artifact"
+            unzip -l "$artifact"
+          done
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/kwilt-*.kwinscript
+          files: |
+            build/kwilt-*.kwinscript
+            build/*.plasmoid
           # Pre-release if: v0.x (whole 0.x line is unstable) OR any tag
           # carrying a semver pre-release suffix (v0.6.0-beta.1, v1.0.0-rc.2).
           # Plain v1.0.0+ publishes as stable.
@@ -73,6 +80,15 @@ jobs:
             # the old plugin installed, remove it first:
             #   kpackagetool6 -t KWin/Script -r ixtli
             # Enable in System Settings → Window Management → KWin Scripts.
+            ```
+
+            **Kwilt Pile widget (optional)**: lists the windows Kwilt has
+            minimized, one click to bring each back.
+
+            ```sh
+            # Download dev.jtekk.kwilt.pile-<VERSION>.plasmoid, then:
+            kpackagetool6 -t Plasma/Applet -i dev.jtekk.kwilt.pile-*.plasmoid
+            # Right-click a panel → Add or Manage Widgets → Kwilt Pile.
             ```
 
             After install, run `scripts/setup-shortcuts.sh` from the repo

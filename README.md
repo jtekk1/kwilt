@@ -176,11 +176,11 @@ kwriteconfig6 --file kwinrc --group Script-kwilt --key MasterWidth 0.6
 Out-of-range values are clamped to the listed range. Invalid `Layout` strings fall back to `centerTile`.
 - Geometry snaps. Visual transitions rely on KDE's built-in desktop effects (System Settings → Workspace Behavior → Desktop Effects).
 
-## Kwilt Pile widget (in development)
+## Kwilt Pile widget
 
 `widget/` is a companion Plasma 6 widget listing the minimized windows on its screen, the current virtual desktop and the current activity: everything Kwilt has knocked out past a layout's cap, plus anything you minimized yourself. Click a window to bring it back; Kwilt tiles it again. In a panel it's the Kwilt logo with a count badge and a popup list; on the desktop it shows the list directly.
 
-Try it from the checkout:
+Each release attaches it as `dev.jtekk.kwilt.pile-<VERSION>.plasmoid` (see Install). To try it from the checkout instead:
 
 ```sh
 kpackagetool6 -t Plasma/Applet -i widget    # first time; -u to update
@@ -217,6 +217,14 @@ kpackagetool6 -t KWin/Script -i kwilt-*.kwinscript
 ```
 
 Then enable in **System Settings → Window Management → KWin Scripts** and run `scripts/setup-shortcuts.sh` once to clear the Plasma defaults that clash with Kwilt's keys (see Shortcuts).
+
+The optional [Kwilt Pile widget](#kwilt-pile-widget) is the `.plasmoid` from the same release:
+
+```sh
+kpackagetool6 -t Plasma/Applet -i dev.jtekk.kwilt.pile-*.plasmoid   # -u to upgrade
+```
+
+Then right-click a panel → **Add or Manage Widgets** → **Kwilt Pile**.
 
 **As a developer — repo symlink** for fast inner-loop iteration:
 
@@ -255,10 +263,10 @@ Remaining work before the KDE Store submission, roughly in order:
 
 **Features**
 
-- [ ] Shortcuts reference tab in the config dialog (read-only — bindings stay
+- [x] Shortcuts reference tab in the config dialog (read-only — bindings stay
       editable in System Settings → Shortcuts; the generic KCM can't edit
       kglobalaccel entries).
-- [ ] Knocked-out pile widget: a plasmoid (Plasma Shell widget) showing the
+- [x] Knocked-out pile widget: a plasmoid (Plasma Shell widget) showing the
       minimized pile for its screen's (output, virtualDesktop), click to
       promote. KWin scripts can't render UI, so this is a companion
       `Plasma/Applet` package — pure QML using `org.kde.taskmanager`'s
