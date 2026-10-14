@@ -64,11 +64,11 @@ These run automatically as `.githooks/pre-commit` (and again as `pre-push`). The
 A `.kwinscript` is the install artifact for KWin scripts — a ZIP with `metadata.json` at the root. KDE Store, GitHub releases, and `kpackagetool6` all consume the same file.
 
 ```sh
-npm run package        # → build/kwilt-<VERSION>.kwinscript
-npm run install:local  # kpackagetool6 -t KWin/Script -i build/kwilt-<VERSION>.kwinscript --upgrade
+npm run package        # → build/kwilt-<VERSION>.kwinscript + build/dev.jtekk.kwilt.pile-<VERSION>.plasmoid
+npm run install:local  # kpackagetool6 installs (or upgrades) both
 ```
 
-`scripts/package.sh` reads `KPlugin.Id` and `KPlugin.Version` from `metadata.json` and zips an **explicit allowlist** — `metadata.json`, `contents/`, `README.md`, `LICENSE`. Dev-only files (`.githooks/`, `flake.nix`, `package.json`, `node_modules/`, etc.) never leak in. Bump `KPlugin.Version` in `metadata.json` to cut a new artifact; the filename tracks it automatically.
+`scripts/package.sh` reads `KPlugin.Id` and `KPlugin.Version` from `metadata.json` and zips an **explicit allowlist** — `metadata.json`, `contents/`, `README.md`, `LICENSE`. Dev-only files (`.githooks/`, `flake.nix`, `package.json`, `node_modules/`, etc.) never leak in. The widget's `.plasmoid` is built the same way from `widget/` (`widget/metadata.json`, `widget/contents/`, plus `LICENSE`). Bump `KPlugin.Version` in **both** `metadata.json` and `widget/metadata.json` to cut a release — `package.sh` refuses mismatched versions and `release.yml` checks both against the tag; the filenames track it automatically.
 
 `scripts/install-local.sh` is for end-to-end testing the packaged archive (not the dev loop — `./dev-reload.sh` is still the fast inner loop via the symlink). It **refuses** to clobber the dev symlink at `~/.local/share/kwin/scripts/kwilt`; remove the symlink (`rm ~/.local/share/kwin/scripts/kwilt`) to switch to packaged-install mode, re-add it (`ln -s "$PWD" ~/.local/share/kwin/scripts/kwilt`) to switch back.
 

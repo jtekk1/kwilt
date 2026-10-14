@@ -25,12 +25,14 @@ else
     echo "warn: shellcheck not installed; skipping shell lint" >&2
 fi
 
-# metadata.json — must be valid JSON.
-if command -v jq >/dev/null 2>&1; then
-    jq . metadata.json >/dev/null || fail=1
-else
-    node -e "JSON.parse(require('fs').readFileSync('metadata.json','utf8'))" || fail=1
-fi
+# metadata.json and the widget's manifest — must be valid JSON.
+for manifest in metadata.json widget/metadata.json; do
+    if command -v jq >/dev/null 2>&1; then
+        jq . "$manifest" >/dev/null || fail=1
+    else
+        node -e "JSON.parse(require('fs').readFileSync('$manifest','utf8'))" || fail=1
+    fi
+done
 
 # JS syntax — fast, no deps beyond node.
 node --check contents/code/main.js || fail=1

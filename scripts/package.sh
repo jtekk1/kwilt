@@ -2,12 +2,16 @@
 # SPDX-FileCopyrightText: 2026 jtekk <jtekk@jtekk.dev>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Build a .kwinscript archive for KWin / KDE Store distribution.
+# Build the release archives for KWin / KDE Store distribution:
 #
-# A .kwinscript is just a ZIP with metadata.json at the root. KWin installs it
-# via `kpackagetool6 -t KWin/Script -i <file>`. We ship metadata.json, the
-# runtime contents/ directory, README.md, and LICENSE — nothing else from the
-# dev tree (no .githooks, package.json, flake.nix, etc.).
+#   build/kwilt-<VERSION>.kwinscript              the KWin script
+#   build/dev.jtekk.kwilt.pile-<VERSION>.plasmoid  the Kwilt Pile widget
+#
+# Both are plain ZIPs with metadata.json at the root, installed with
+# `kpackagetool6 -t KWin/Script -i <file>` and `-t Plasma/Applet -i <file>`.
+# Each ships metadata.json, its runtime contents/ directory and LICENSE (the
+# script also README.md) — nothing else from the dev tree (no .githooks,
+# package.json, flake.nix, etc.).
 
 set -euo pipefail
 
@@ -50,11 +54,32 @@ zip -r "$out" \
     LICENSE \
     >/dev/null
 
-size=$(du -h "$out" | cut -f1)
-echo "wrote ${out} (${size})"
+widget_id=$(jq -r '.KPlugin.Id' widget/metadata.json)
+widget_version=$(jq -r '.KPlugin.Version' widget/metadata.json)
+
+# The two packages release together under one tag, so their versions move in
+# lockstep.
+if [ "$widget_version" != "$version" ]; then
+    echo "error: widget/metadata.json KPlugin.Version (${widget_version}) does not match metadata.json (${version})" >&2
+    exit 1
+fi
+
+widget_out="${out_dir}/${widget_id}-${version}.plasmoid"
+rm -f "$widget_out"
+
+# zip stores paths relative to the working directory, so build from inside
+# widget/ to put its metadata.json at the archive root. LICENSE comes from the
+# repo root via -j (junk the path).
+(cd widget && zip -r "../${widget_out}" metadata.json contents >/dev/null)
+zip -j "$widget_out" LICENSE >/dev/null
+
+for f in "$out" "$widget_out"; do
+    echo "wrote ${f} ($(du -h "$f" | cut -f1))"
+done
 echo
 echo "Install locally for end-to-end testing:"
 echo "    npm run install:local"
 echo
 echo "Inspect contents:"
 echo "    unzip -l ${out}"
+echo "    unzip -l ${widget_out}"
