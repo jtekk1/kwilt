@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 jtekk <jtekk@jtekk.dev>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Install the built .kwinscript and the Kwilt Pile .plasmoid via kpackagetool6.
+# Install the built .kwinscript and every widget .plasmoid via kpackagetool6.
 #
 # This is the end-to-end install path — the real one a user would take. It is
 # NOT the dev loop (./dev-reload.sh handles that via the symlink and a busctl
@@ -22,10 +22,17 @@ fi
 plugin_id=$(jq -r '.KPlugin.Id' metadata.json)
 version=$(jq -r '.KPlugin.Version' metadata.json)
 archive="build/${plugin_id}-${version}.kwinscript"
-widget_id=$(jq -r '.KPlugin.Id' widget/metadata.json)
-widget_archive="build/${widget_id}-${version}.plasmoid"
+widget_ids=()
+for dir in widgets/*/; do
+    widget_ids+=("$(jq -r '.KPlugin.Id' "${dir}metadata.json")")
+done
 
-for f in "$archive" "$widget_archive"; do
+archives=("$archive")
+for widget_id in "${widget_ids[@]}"; do
+    archives+=("build/${widget_id}-${version}.plasmoid")
+done
+
+for f in "${archives[@]}"; do
     if [ ! -f "$f" ]; then
         echo "error: ${f} not found. Run 'npm run package' first." >&2
         exit 1
@@ -59,22 +66,22 @@ fi
 kpackagetool6 -t KWin/Script "$action" "$archive"
 echo "${verb^} ${plugin_id} ${version}."
 
-# The widget has no dev symlink to protect: the dev path installs it from
-# widget/ with kpackagetool6 too, so upgrading over it is safe.
-widget_path="${HOME}/.local/share/plasma/plasmoids/${widget_id}"
-if [ -d "$widget_path" ]; then
-    widget_action="-u"
-    widget_verb="upgraded"
-else
-    widget_action="-i"
-    widget_verb="installed"
-fi
-
-kpackagetool6 -t Plasma/Applet "$widget_action" "$widget_archive"
-echo "${widget_verb^} ${widget_id} ${version}."
+# The widgets have no dev symlink to protect: the dev path installs them from
+# widgets/<name>/ with kpackagetool6 too, so upgrading over them is safe.
+for widget_id in "${widget_ids[@]}"; do
+    if [ -d "${HOME}/.local/share/plasma/plasmoids/${widget_id}" ]; then
+        widget_action="-u"
+        widget_verb="upgraded"
+    else
+        widget_action="-i"
+        widget_verb="installed"
+    fi
+    kpackagetool6 -t Plasma/Applet "$widget_action" "build/${widget_id}-${version}.plasmoid"
+    echo "${widget_verb^} ${widget_id} ${version}."
+done
 
 echo
 echo "Enable the script in: System Settings → Window Management → KWin Scripts."
-echo "Add the widget: right-click a panel → Add or Manage Widgets → Kwilt Pile."
+echo "Add the widgets: right-click a panel → Add or Manage Widgets → Kwilt Pile / Kwilt Layouts."
 echo "Plasma caches widget QML; after an upgrade, run"
 echo "    systemctl --user restart plasma-plasmashell"

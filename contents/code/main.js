@@ -874,7 +874,8 @@ function geometriesFloating() { return []; }
 //                names in System Settings. The key stays the config value.
 //   shortcutId — kglobalaccel action ID for the direct-set shortcut. Frozen
 //                per-layout for shortcut persistence; user re-binds in KDE
-//                Shortcuts settings if defaults collide.
+//                Shortcuts settings if defaults collide. The Kwilt Layouts
+//                widget (widgets/layouts) invokes these IDs by name.
 //
 // Declared with `var` (not `const`) so QJSEngine's static-TDZ analysis
 // doesn't complain about capFor / isTileable / setLayoutFor referencing
@@ -1648,12 +1649,19 @@ function onActivated(w) {
   }
 }
 
-// Resolve the (output, virtualDesktop) key of the currently focused window.
-// Returns null when there's no active window or its (output, desktop) can't be
-// determined — direct-set / cycle shortcuts log a warning and no-op in that
-// case rather than mutating a random key.
+// Resolve the queue key the layout shortcuts act on: the focused window's,
+// else the active screen's on the current desktop. Returns null only when
+// neither can be determined — direct-set / cycle shortcuts log a warning and
+// no-op in that case rather than mutating a random key.
 function activeKey() {
-  return workspace.activeWindow ? windowKey(workspace.activeWindow) : null;
+  const key = workspace.activeWindow ? windowKey(workspace.activeWindow) : null;
+  if (key) return key;
+  // No usable focused window — e.g. the Kwilt Layouts widget's popup has the
+  // focus, or every window on this desktop is closed. Fall back to the
+  // active screen and current desktop, as popPile does.
+  const out = workspace.activeScreen;
+  const desk = workspace.currentDesktop;
+  return out && desk ? keyFor(out, desk) : null;
 }
 
 // Every queue key on the same (output, virtualDesktop) as `key`, one per

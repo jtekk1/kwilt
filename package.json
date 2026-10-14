@@ -5,7 +5,7 @@
   "description": "Tooling for the Kwilt KWin tiling script. The script itself is contents/code/main.js and runs inside KWin, not Node.",
   "scripts": {
     "lint": "eslint contents/code/main.js",
-    "check:json": "node -e \"for (const f of ['metadata.json','widget/metadata.json']) JSON.parse(require('fs').readFileSync(f,'utf8'))\"",
+    "check:json": "node -e \"for (const f of ['metadata.json','widgets/pile/metadata.json','widgets/layouts/metadata.json']) JSON.parse(require('fs').readFileSync(f,'utf8'))\"",
     "check:js": "node --check contents/code/main.js",
     "check": "npm run check:json && npm run check:js && npm run lint",
     "package": "scripts/package.sh",

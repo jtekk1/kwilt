@@ -25,8 +25,8 @@ else
     echo "warn: shellcheck not installed; skipping shell lint" >&2
 fi
 
-# metadata.json and the widget's manifest — must be valid JSON.
-for manifest in metadata.json widget/metadata.json; do
+# metadata.json and the widgets' manifests — must be valid JSON.
+for manifest in metadata.json widgets/*/metadata.json; do
     if command -v jq >/dev/null 2>&1; then
         jq . "$manifest" >/dev/null || fail=1
     else

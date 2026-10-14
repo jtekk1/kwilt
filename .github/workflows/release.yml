@@ -30,11 +30,11 @@ jobs:
         run: |
           set -euo pipefail
           tag_version="${GITHUB_REF#refs/tags/v}"
-          for manifest in metadata.json widget/metadata.json; do
+          for manifest in metadata.json widgets/*/metadata.json; do
             json_version=$(jq -r '.KPlugin.Version' "$manifest")
             if [ "$tag_version" != "$json_version" ]; then
               echo "::error::Tag v${tag_version} does not match ${manifest} KPlugin.Version (${json_version})."
-              echo "::error::Bump KPlugin.Version in both manifests in a commit, then re-tag."
+              echo "::error::Bump KPlugin.Version in every manifest in a commit, then re-tag."
               exit 1
             fi
           done
@@ -46,9 +46,11 @@ jobs:
         run: |
           set -euo pipefail
           json_version=$(jq -r '.KPlugin.Version' metadata.json)
-          widget_id=$(jq -r '.KPlugin.Id' widget/metadata.json)
-          for artifact in "build/kwilt-${json_version}.kwinscript" \
-                          "build/${widget_id}-${json_version}.plasmoid"; do
+          artifacts=("build/kwilt-${json_version}.kwinscript")
+          for manifest in widgets/*/metadata.json; do
+            artifacts+=("build/$(jq -r '.KPlugin.Id' "$manifest")-${json_version}.plasmoid")
+          done
+          for artifact in "${artifacts[@]}"; do
             if [ ! -f "$artifact" ]; then
               echo "::error::Expected ${artifact} not produced by scripts/package.sh"
               exit 1
@@ -82,13 +84,15 @@ jobs:
             # Enable in System Settings → Window Management → KWin Scripts.
             ```
 
-            **Kwilt Pile widget (optional)**: lists the windows Kwilt has
-            minimized, one click to bring each back.
+            **Widgets (optional)**: *Kwilt Pile* lists the windows Kwilt
+            has minimized, one click to bring each back. *Kwilt Layouts*
+            picks the layout with a click instead of a shortcut.
 
             ```sh
-            # Download dev.jtekk.kwilt.pile-<VERSION>.plasmoid, then:
+            # Download the .plasmoid files, then for each:
             kpackagetool6 -t Plasma/Applet -i dev.jtekk.kwilt.pile-*.plasmoid
-            # Right-click a panel → Add or Manage Widgets → Kwilt Pile.
+            kpackagetool6 -t Plasma/Applet -i dev.jtekk.kwilt.layouts-*.plasmoid
+            # Right-click a panel → Add or Manage Widgets → Kwilt Pile / Kwilt Layouts.
             ```
 
             After install, run `scripts/setup-shortcuts.sh` from the repo
