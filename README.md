@@ -136,6 +136,7 @@ Escape hatch layout: Kwilt does nothing to windows on any (output, virtualDeskto
 - **Resizing a tiled window** (e.g. `Meta+Right-drag` on Plasma defaults) adjusts the layout: edge drags that move the master-vs-non-master boundary update `MasterWidth`; drags between the inner and outer non-master columns (leftTile / rightTile 2-col mode) update the per-key inter-column split; drags along the stacking axis update per-column row-height ratios (centerTile side columns and leftTile / rightTile 2-column mode). On transposed layouts (`verticalCenter` / `verticalDual` / `topTile` / `bottomTile`, or portrait auto-rotation) the same adjustments apply with the axes flipped — e.g. dragging topTile's master boundary vertically updates `MasterWidth`. centerTile N=2 shares this behavior (master boundary drag updates `MasterWidth`). Without the persistence helper these writes are in-memory and reset on script reload; with it they persist to kwinrc (see Persistence below).
 - **Keyboard resize** (`Meta+Ctrl+Alt+arrows`) makes the same adjustments in steps of `ResizeStep` percent of the work area: `Right` / `Down` grow the active tile, `Left` / `Up` shrink it. Each press moves the tile edge that borders another tile — the right (bottom) edge, or the left (top) edge when the right (bottom) one is the screen edge — exactly as if you'd dragged it. Layouts with no adjustable boundary there (autoGrid, monocle, dual, a lone window) ignore the press.
 - **Layout is per-(output, virtualDesktop)**. The layout shortcuts (cycle + direct-set) act on the (output, virtualDesktop) of the currently active window — different monitors and different virtual desktops keep independent layouts. New (output, virtualDesktop) combos inherit the `Layout` config default. Per-key overrides reset on script reload unless the persistence helper is installed (see Persistence below).
+- **KDE Activities each get their own tiles.** Kwilt tiles only the current activity's windows on each (output, virtualDesktop); windows on other activities keep their own queue and order, ready for when you switch back. A window shown on all activities (or several) follows you into the current one. The layout and resize splits are shared: changing the layout on one activity changes it on that monitor and desktop for every activity.
 
 ## Configuration
 
@@ -275,9 +276,9 @@ Remaining work before the KDE Store submission, roughly in order:
 - [x] Keyboard resize: `Meta+Ctrl+Alt+arrows`, step set by `ResizeStep`.
 - [x] Send-window-to-screen: Kwilt's own `Meta+Alt+(Shift+)arrows`
       shortcuts, driving KWin's directional screen actions.
-- [ ] KDE Activities: decide — exclude windows outside the current activity
-      from tiling, or document Activities as unsupported. Queues currently
-      ignore activities entirely.
+- [x] KDE Activities: each activity tiles only its own windows, in its own
+      queue per (output, virtualDesktop); layouts stay shared across
+      activities.
 
 **Release**
 

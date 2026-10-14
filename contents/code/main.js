@@ -127,14 +127,15 @@ function readJsonMap(key) {
   }
 }
 
-// Layout choice is per-(output, virtualDesktop). `layouts` holds explicit
+// Layout choice is per-(output, virtualDesktop), shared by every activity's
+// queue on that pair (see layoutKey). `layouts` holds explicit
 // per-key overrides; missing entries fall back to CFG.layout (the
 // kwinrc-tunable global default). setLayoutFor / cycleLayout mutate a
 // single key; new (output, desktop) combos inherit CFG.layout on first
 // read via layoutFor.
 const layouts = new Map();
 
-function layoutFor(key) { return layouts.get(key) || CFG.layout; }
+function layoutFor(key) { return layouts.get(layoutKey(key)) || CFG.layout; }
 
 // Resolve the visible cap for a key's active layout via the LAYOUTS registry:
 // `entry.cap` is the primary source (either a fixed value like monocle=1 or a
@@ -217,7 +218,7 @@ const rowSplits = new Map();
 const interColSplits = new Map();
 
 function interColSplitKey(queueKey, layout) {
-  return queueKey + "|" + layout;
+  return layoutKey(queueKey) + "|" + layout;
 }
 
 function interColSplitFor(queueKey, layout) {
@@ -226,7 +227,7 @@ function interColSplitFor(queueKey, layout) {
 }
 
 function rowSplitKey(queueKey, layout, column) {
-  return queueKey + "|" + layout + "|" + column;
+  return layoutKey(queueKey) + "|" + layout + "|" + column;
 }
 
 function rowSplitFor(queueKey, layout, column, expectedRows) {
@@ -357,8 +358,42 @@ function desktopId(desk) {
   return desk.id || desk.x11DesktopNumber || String(desk);
 }
 
-function keyFor(out, desk) {
-  return outputId(out) + "|" + desktopId(desk);
+// Plasma's current activity id; "" when the activity manager isn't running,
+// which puts every window in the same activity and leaves Kwilt as it was.
+function currentActivity() {
+  return workspace.currentActivity || "";
+}
+
+// The activity whose queue `w` belongs to. A window on exactly one activity
+// lives in that activity's queue. A window on all activities (an empty list)
+// or on several follows the current one when it is shown there, else its
+// first. onCurrentActivityChanged migrates those followers on every switch.
+function activityOf(w) {
+  const acts = w.activities || [];
+  if (acts.length === 1) return acts[0];
+  const cur = currentActivity();
+  if (acts.length === 0 || acts.indexOf(cur) !== -1) return cur;
+  return acts[0];
+}
+
+// Queue key: output|desktop|activity. Each activity keeps its own queue, so
+// a window on another activity never takes a tile slot here. `act` defaults
+// to the current activity.
+function keyFor(out, desk, act) {
+  return outputId(out) + "|" + desktopId(desk) + "|" + (act === undefined ? currentActivity() : act);
+}
+
+// Layouts and saved splits are per (output, desktop), shared across
+// activities: strip the activity off a queue key. Activity ids are UUIDs,
+// so the last "|" is always the separator.
+function layoutKey(key) {
+  return key.slice(0, key.lastIndexOf("|"));
+}
+
+// The queue key `w` belongs in, or null without an output or single desktop.
+function windowKey(w) {
+  const od = outputAndDesk(w);
+  return od ? keyFor(od.out, od.desk, activityOf(w)) : null;
 }
 
 function singleDesktop(w) {
@@ -398,7 +433,7 @@ function isTileable(w) {
   // (`floating` today) never track windows on their key. Deferred to the end
   // so intrinsic rejections (dialogs, popups, fullscreen, etc.) still apply
   // regardless of the key's layout.
-  if (!LAYOUTS[layoutFor(keyFor(w.output, singleDesktop(w)))].tiles) return false;
+  if (!LAYOUTS[layoutFor(windowKey(w))].tiles) return false;
   return true;
 }
 
@@ -929,13 +964,6 @@ function restoreBorder(w) {
   w._kwiltBorderForced = false;
 }
 
-function queueFor(out, desk, create) {
-  const key = keyFor(out, desk);
-  let q = queues.get(key);
-  if (!q && create) { q = []; queues.set(key, q); }
-  return q;
-}
-
 // `_kwiltQueueKey` is a Qt dynamic property set on tracked windows in track()
 // and cleared in untrack(); it's a hint pointing at the queue that (probably)
 // contains this window. findContaining consults it first — an O(1) Map.get +
@@ -1020,15 +1048,15 @@ function clearPinsFor(w) {
 }
 
 function applyQueue(key, q, out, desk) {
-  // Defensive prune: drop entries that are no longer tileable, no longer on
-  // this output, or no longer on this desktop. Belt-and-suspenders for state
+  // Defensive prune: drop entries that are no longer tileable or no longer
+  // belong to this key (moved output, desktop or activity). Belt-and-suspenders for state
   // changes signal handlers may miss (zombie Window refs, externally
   // fullscreened or destroyed windows, etc.) — without this they'd inflate
   // visible.length and we'd allocate a tile slot for a window that isn't
   // actually there, leaving a "ghost" slot showing the desktop.
   for (let i = q.length - 1; i >= 0; i--) {
     const w = q[i];
-    if (!isTileable(w) || w.output !== out || singleDesktop(w) !== desk) {
+    if (!isTileable(w) || windowKey(w) !== key) {
       q.splice(i, 1);
     }
   }
@@ -1086,9 +1114,9 @@ function retileAll() {
 
 function track(w) {
   if (!isTileable(w)) return null;
-  const desk = singleDesktop(w);
-  const key = keyFor(w.output, desk);
-  const q = queueFor(w.output, desk, true);
+  const key = windowKey(w);
+  let q = queues.get(key);
+  if (!q) { q = []; queues.set(key, q); }
   if (q.indexOf(w) === -1) q.push(w);
   w._kwiltQueueKey = key;
   return key;
@@ -1205,6 +1233,7 @@ function bindWindow(w) {
   w._kwiltBound = true;
   if (w.outputChanged) w.outputChanged.connect(function () { migrate(w); });
   if (w.desktopsChanged) w.desktopsChanged.connect(function () { migrate(w); });
+  if (w.activitiesChanged) w.activitiesChanged.connect(function () { migrate(w); });
   if (w.minimizedChanged) w.minimizedChanged.connect(function () { onMinimizedChanged(w); });
   if (w.fullScreenChanged) w.fullScreenChanged.connect(function () { onFullScreenChanged(w); });
   if (w.maximizedChanged) w.maximizedChanged.connect(function () { onMaximizedChanged(w); });
@@ -1574,6 +1603,20 @@ function tryUpdateInterColSplit(ctx, fg) {
   return true;
 }
 
+// Switching activity: windows shown on several activities (or all of them)
+// follow into the new activity's queue; single-activity windows stay where
+// they are. Then retile everything, since a layout changed on another
+// activity applies here too.
+function onCurrentActivityChanged() {
+  for (const w of allWindows()) {
+    if (!w._kwiltQueueKey) continue;
+    const acts = w.activities || [];
+    if (acts.length === 1) continue;
+    if (windowKey(w) !== w._kwiltQueueKey) migrate(w);
+  }
+  retileAll();
+}
+
 function onAdded(w) {
   const key = track(w);
   if (!key) return;
@@ -1610,8 +1653,15 @@ function onActivated(w) {
 // determined — direct-set / cycle shortcuts log a warning and no-op in that
 // case rather than mutating a random key.
 function activeKey() {
-  const od = outputAndDesk(workspace.activeWindow);
-  return od ? keyFor(od.out, od.desk) : null;
+  return workspace.activeWindow ? windowKey(workspace.activeWindow) : null;
+}
+
+// Every queue key on the same (output, virtualDesktop) as `key`, one per
+// activity with tracked windows. They share a layout, so a layout change
+// retiles all of them.
+function siblingKeys(key) {
+  const base = layoutKey(key);
+  return Array.from(queues.keys()).filter(function (k) { return layoutKey(k) === base; });
 }
 
 // Set the layout on a specific (output, virtualDesktop) key. Missing keys
@@ -1627,25 +1677,24 @@ function setLayoutFor(key, name) {
   // will drop them (isTileable=false under the new layout) and leaves their
   // minimize state untouched — without this pass they'd stay hidden.
   if (nowNoTile && !wasNoTile) {
-    const q = queues.get(key);
-    if (q) {
-      for (const w of q) { if (w.minimized) w.minimized = false; }
+    for (const k of siblingKeys(key)) {
+      for (const w of queues.get(k)) { if (w.minimized) w.minimized = false; }
     }
   }
-  if (name === CFG.layout) layouts.delete(key);
-  else layouts.set(key, name);
+  if (name === CFG.layout) layouts.delete(layoutKey(key));
+  else layouts.set(layoutKey(key), name);
   savePerKeyLayouts();
   // Leaving a no-tile layout: no windows are tracked for this key (they were
   // pruned on entry). Discover eligible windows from the workspace and track
   // them so retileKey has something to tile.
   if (wasNoTile && !nowNoTile) {
     for (const w of allWindows()) {
-      const desk = singleDesktop(w);
-      if (desk && w.output && keyFor(w.output, desk) === key) track(w);
+      const wk = windowKey(w);
+      if (wk && layoutKey(wk) === layoutKey(key)) track(w);
     }
   }
-  log("layout[" + key + "]=" + name + " cap=" + LAYOUTS[name].cap);
-  retileKey(key);
+  log("layout[" + layoutKey(key) + "]=" + name + " cap=" + LAYOUTS[name].cap);
+  for (const k of siblingKeys(key)) retileKey(k);
   showOsd("Kwilt: " + LAYOUTS[name].label);
 }
 
@@ -1997,6 +2046,7 @@ function init() {
   workspace.windowActivated.connect(onActivated);
   workspace.screensChanged.connect(retileAll);
   if (workspace.desktopLayoutChanged) workspace.desktopLayoutChanged.connect(retileAll);
+  if (workspace.currentActivityChanged) workspace.currentActivityChanged.connect(onCurrentActivityChanged);
 
   // `typeof` guard rather than direct read — undeclared globals throw
   // ReferenceError on QJSEngine, and not every KWin build exposes this.
