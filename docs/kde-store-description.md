@@ -109,6 +109,13 @@ LayoutOsd — show the layout name in Plasma's on-screen popup when it changes; 
 BorderlessWhenTiled — strip window decorations on tiled windows
 AlwaysFloat — comma-separated substring matches against resourceClass / resourceName (e.g. kcalc, pavucontrol, plasma-systemmonitor); matches never tile
 
+Widgets (optional)
+
+Two companion Plasma widgets, each its own download:
+
+Kwilt Pile — the windows Kwilt has minimized on this screen and desktop, one click to bring each back.
+Kwilt Layouts — pick the layout with a click instead of a shortcut.
+
 Install
 
 Install from System Settings → Window Management → KWin Scripts → Get New…, or download the .kwinscript and run:

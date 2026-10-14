@@ -6,7 +6,7 @@
         "Description": "Pick the Kwilt tiling layout for this screen and desktop with a click. Companion to the Kwilt tiling script: each entry runs the same action as its layout shortcut.",
         "Icon": "view-grid",
         "Category": "Windows and Tasks",
-        "Version": "0.10.0-beta.7",
+        "Version": "0.11.0-beta.8",
         "License": "GPL-3.0-or-later",
         "Website": "https://github.com/jtekk1/kwilt",
         "Authors": [
