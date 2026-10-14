@@ -266,19 +266,17 @@ Look for `[kwilt]` lines. The KWin Scripting Console (`Alt+F2` → `wm console`)
 
 ## Roadmap to 1.0
 
-Remaining work before the KDE Store submission, roughly in order:
+Every 1.0 feature is in. What's left is release work, tracked in the [v0.11.0-beta.8 milestone](../../milestone/1) and then the 1.0 release itself.
 
 **Features**
 
 - [x] Shortcuts reference tab in the config dialog (read-only — bindings stay
       editable in System Settings → Shortcuts; the generic KCM can't edit
       kglobalaccel entries).
-- [x] Knocked-out pile widget: a plasmoid (Plasma Shell widget) showing the
-      minimized pile for its screen's (output, virtualDesktop), click to
-      promote. KWin scripts can't render UI, so this is a companion
-      `Plasma/Applet` package — pure QML using `org.kde.taskmanager`'s
-      `TasksModel` (minimized windows per screen/desktop; activating one
-      already triggers Kwilt's promote path, so v1 needs no custom IPC).
+- [x] Kwilt Pile widget: a plasmoid listing the minimized windows on its
+      screen, desktop and activity, click to bring one back. Pure QML over
+      `org.kde.taskmanager`'s `TasksModel`; activating a window already
+      triggers Kwilt's promote path, so it needs no custom IPC.
 - [x] Keyboard resize: `Meta+Ctrl+Alt+arrows`, step set by `ResizeStep`.
 - [x] Send-window-to-screen: Kwilt's own `Meta+Alt+(Shift+)arrows`
       shortcuts, driving KWin's directional screen actions.
@@ -286,19 +284,80 @@ Remaining work before the KDE Store submission, roughly in order:
       queue per (output, virtualDesktop); layouts stay shared across
       activities.
 
+Added along the way (0.11):
+
+- [x] `Meta+M` promotes the active window to master; `Meta+Z` brings back the
+      most recently minimized window.
+- [x] Layout name in Plasma's on-screen popup on every switch (`LayoutOsd`),
+      and readable layout names there and in System Settings → Shortcuts.
+- [x] Kwilt Layouts widget: pick the layout with a click instead of a
+      shortcut.
+
 **Release**
 
-- [ ] Custom icon for the store listing (replace the stock KWin-script icon).
+- [x] Kwilt logo for the store listings and widgets (the script row in
+      System Settings keeps the stock `view-grid` icon).
 - [ ] Screenshot set covering the layout families (including the vertical
-      layouts, the widget, and gaps).
+      layouts, both widgets, and gaps).
 - [ ] Finalize the store listing text (`docs/kde-store-description.md`,
-      converted to what store.kde.org renders).
+      converted to what store.kde.org renders), plus listings for the two
+      widgets.
 - [ ] End-to-end packaged-install test: `npm run package`, remove the dev
-      symlink, `npm run install:local`, verify script + config dialog +
-      `setup-shortcuts.sh` + `install-persistence.sh` from the packaged copy.
-- [ ] Bump `KPlugin.Version` to `1.0.0`, tag a GitHub release with the
-      `.kwinscript` attached, submit to the KDE Store (the widget ships as its
-      own `.plasmoid` artifact and *Plasma Widgets* store listing).
+      symlink, `npm run install:local`, verify script + config dialog + both
+      widgets + `setup-shortcuts.sh` + `install-persistence.sh` from the
+      packaged copies.
+- [ ] Bump `KPlugin.Version` to `1.0.0` in every manifest, tag a GitHub
+      release (the workflow attaches the `.kwinscript` and each widget's
+      `.plasmoid`), and submit the script and both widgets to the KDE Store.
+
+## Beyond 1.0
+
+Ideas for after the 1.0 release, not yet scheduled. Many come from what
+[MangoWM](https://github.com/mangowm/mango), [niri](https://github.com/YaLTeR/niri)
+and [Hyprland](https://wiki.hypr.land/Configuring/Layouts/) offer.
+
+**Layouts**
+
+- [ ] Scrolling (niri, Hyprland, Mango's Scroller): windows in columns on an
+      endless strip that scrolls to follow the focus, instead of a fixed
+      number of visible tiles and a pile. The biggest change to Kwilt's
+      model; [Karousel](https://github.com/peterfajdiga/karousel) shows a KWin
+      script can do it.
+- [ ] Vertical Scrolling (Mango's Vertical Scroller): the same strip running
+      top to bottom, for portrait monitors.
+- [ ] Spiral / Dwindle (Hyprland, Mango): each new window splits the newest
+      tile in half, alternating direction.
+- [ ] Multiple masters (`nmaster` in Mango's Tile and Hyprland's Master): more
+      than one window in the master area, adjustable with a key.
+
+**Features**
+
+- [ ] Scratchpad: one key shows and hides a chosen window (a terminal, say),
+      floating and centered.
+- [ ] Pseudotile (Hyprland): a window keeps its preferred size, centered
+      inside its tile.
+- [ ] Master width presets (niri, Mango): a key cycles `MasterWidth` through
+      presets such as ½, ⅔ and ¾.
+- [ ] Editable shortcuts in Kwilt's settings dialog. Today the Shortcuts tab is
+      a read-only reference and bindings are changed in System Settings →
+      Shortcuts, because the generic KWin script settings page can't edit
+      global shortcuts.
+- [ ] Per-activity layouts: each activity remembers its own layout per screen
+      and desktop (today they're shared).
+- [ ] Persist master pins (`Meta+S`) across script reloads through the
+      persistence helper, like layouts and splits.
+- [ ] Kwilt Layouts highlights the current layout. Needs the persistence
+      helper to carry the state, since a KWin script can't publish it.
+- [ ] Kwilt Layouts acts on the screen the widget sits on, not the active
+      screen.
+
+**Out of reach for a KWin script**
+
+- Tabbed groups (niri, Hyprland): a KWin script can't draw tab bars.
+- Window swallowing (Mango): a script can't see which process launched a
+  window, so it can't tell a terminal's GUI child from any other window.
+- An overview of all windows (niri, Mango): KWin already has one
+  (`Meta+W`).
 
 ## Shortcuts
 

@@ -203,8 +203,9 @@ const masters = new Map();
 // Ratios sum to 1 and have one entry per row in that column. Missing entries
 // (or a length mismatch when the column's row count has changed since state
 // was written) fall back to equal splits — keeps user-adjusted splits stable
-// at a specific N without needing per-N state buckets. Session-only, like
-// pins — persistence is a shared write-path follow-up.
+// at a specific N without needing per-N state buckets. Persisted to kwinrc
+// RowSplitsJson through the persistence helper when it's installed (see
+// saveRowSplitsAll); without it, session-only. Pins are always session-only.
 //
 // Column names:
 //   centerTile:                  "left" | "right"
@@ -1349,10 +1350,10 @@ function captureResizeCtx(w) {
 // Height delta -> tryUpdateRowSplit (adjust row-height ratios in the slot's
 // column). Both can fire in the same drag if the user resized diagonally.
 //
-// Writes are IN-MEMORY: KWin's script API exposes readConfig but not
-// writeConfig, so new values survive until the next script reload (login,
-// KCM save, dev cycle). Persistence via kwriteconfig6-through-callDBus is
-// a follow-up — same write-path problem as the 0.8.0 anchor.
+// KWin's script API exposes readConfig but not writeConfig, so the updates
+// persist only through the optional persistence helper (saveConfig →
+// D-Bus → kwinrc). Without it they last until the next script reload
+// (login, KCM save, dev cycle).
 
 // Layouts whose geometry is transposed base-layout math, mapped to the base
 // layout name the solvers branch on. Split-state keys keep the REAL layout
