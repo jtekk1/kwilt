@@ -29,12 +29,21 @@ daemon_dst="${install_dir}/kwilt-config-writer.py"
 dbus_service="${dbus_dir}/${BUS_NAME}.service"
 systemd_unit="${systemd_dir}/${UNIT_NAME}"
 
+# The session bus reads service files at startup. Ask it to re-read them so
+# a fresh install is activatable (and Kwilt's check for the helper finds it)
+# before the next login. Best effort: on failure the next login picks it up.
+reload_bus_config() {
+    busctl --user call org.freedesktop.DBus /org/freedesktop/DBus \
+        org.freedesktop.DBus ReloadConfig >/dev/null 2>&1 || true
+}
+
 # --- Uninstall ---
 
 if [[ "${1-}" == "--uninstall" ]]; then
     systemctl --user disable --now "${UNIT_NAME}" 2>/dev/null || true
     rm -f "${systemd_unit}" "${dbus_service}" "${daemon_dst}"
     systemctl --user daemon-reload
+    reload_bus_config
     rmdir "${install_dir}" 2>/dev/null || true
     echo "Kwilt persistence helper removed."
     exit 0
@@ -114,6 +123,7 @@ WantedBy=default.target
 UNIT
 
 systemctl --user daemon-reload
+reload_bus_config
 systemctl --user enable --now "${UNIT_NAME}"
 
 # --- Verify ---

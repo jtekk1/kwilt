@@ -2013,20 +2013,29 @@ function init() {
     }
   });
 
-  // Ping the persistence helper. Fire-and-forget with a callback: if the
-  // service isn't installed (or the daemon crashed), the callback fires
-  // with a null / non-string reply and we log the missing-helper hint.
+  // Check for the persistence helper. KWin runs a callDBus callback only
+  // when the call succeeds, so pinging a missing service would stay silent.
+  // Ask the bus daemon first, which always answers: the helper is
+  // D-Bus-activated, so it's listed as activatable even when not running.
   // Kwilt still works either way — the state just doesn't survive reload.
   if (typeof callDBus === "function") {
-    callDBus(PERSIST_BUS, PERSIST_PATH, PERSIST_IFACE, "Ping",
-             function (reply) {
-               if (reply === "pong") {
-                 log("persistence helper reachable (" + PERSIST_BUS + ")");
-               } else {
-                 log("persistence helper not detected; state changes will " +
-                     "NOT persist across script reload. " +
-                     "Run scripts/install-persistence.sh to enable.");
+    const notDetected = function () {
+      log("persistence helper not detected; state changes will " +
+          "NOT persist across script reload. " +
+          "Run scripts/install-persistence.sh to enable.");
+    };
+    callDBus("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+             "ListActivatableNames",
+             function (names) {
+               if (!names || Array.prototype.indexOf.call(names, PERSIST_BUS) === -1) {
+                 notDetected();
+                 return;
                }
+               callDBus(PERSIST_BUS, PERSIST_PATH, PERSIST_IFACE, "Ping",
+                        function (reply) {
+                          if (reply === "pong") log("persistence helper reachable (" + PERSIST_BUS + ")");
+                          else notDetected();
+                        });
              });
   }
 
