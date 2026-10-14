@@ -1,4 +1,4 @@
-Kwilt is a KWin tiling script for Plasma 6. Every (output, virtual desktop) pair gets its own independent window queue, layout choice, master pin, and per-column resize state — different monitors and different virtual desktops keep independent tiling behavior. Switch desktops or unplug a monitor and Kwilt re-flows each screen in place.
+Kwilt is a KWin tiling script for Plasma 6. Every (output, virtual desktop) pair gets its own independent window queue, layout choice, master pin, and per-column resize state — different monitors and different virtual desktops keep independent tiling behavior. Switch desktops or unplug a monitor and Kwilt re-flows each screen in place. KDE Activities are supported: each activity tiles only its own windows and keeps its own window order, while the layout choice stays shared.
 
 Layouts
 
